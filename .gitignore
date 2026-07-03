@@ -26,3 +26,6 @@ ehthumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Source art (not needed in repo)
+assets/pixfix-source.png
