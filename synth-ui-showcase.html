@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark" data-theme="rainbow">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<title>Pixfix synth-ui — showcase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:wght@400;500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/synth-ui.css" />
+<style>
+  :root{ --disp:"Shantell Sans",ui-rounded,system-ui,sans-serif; --body:"Nunito",ui-rounded,system-ui,sans-serif;
+    --accent:#FF5A5F; --wind:#9B6DFF; }
+  [data-mode="dark"]{ --paper:#14121C; --ink:#F5F0EC; --ink-soft:#A79FB8; --glass:rgba(255,255,255,.07); --glass-brd:rgba(255,255,255,.16); --shadow:rgba(0,0,0,.45); }
+  [data-mode="light"]{ --paper:#FFFDF9; --ink:#2C2622; --ink-soft:#8B7F76; --glass:rgba(255,255,255,.55); --glass-brd:rgba(255,255,255,.8); --shadow:rgba(44,38,34,.10); }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; min-height:100%;}
+  body{ font-family:var(--body); color:var(--ink); background:
+      radial-gradient(60% 50% at 12% 6%, rgba(255,90,95,.20), transparent 76%),
+      radial-gradient(60% 50% at 90% 10%, rgba(62,142,247,.18), transparent 76%),
+      radial-gradient(60% 50% at 50% 100%, rgba(155,109,255,.20), transparent 78%),
+      var(--paper); background-attachment:fixed; padding:22px 18px 60px; }
+  .wrap{ max-width:680px; margin:0 auto; }
+  h1{ font-family:var(--disp); font-weight:700; font-size:26px; margin:0 0 2px; }
+  .sub{ color:var(--ink-soft); font-weight:600; font-size:14px; margin:0 0 18px; }
+  .bar{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+  .bar button{ font-family:var(--disp); font-weight:700; font-size:13px; padding:8px 13px; border-radius:12px; cursor:pointer;
+    background:var(--glass); color:var(--ink); border:1.5px solid var(--glass-brd); }
+  .card{ background:var(--glass); border:1.5px solid var(--glass-brd); border-radius:20px; padding:16px 18px; margin-bottom:16px;
+    box-shadow:0 10px 26px var(--shadow); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+  .card h2{ font-family:var(--disp); font-weight:700; font-size:15px; margin:0 0 3px; letter-spacing:.3px; }
+  .card p{ color:var(--ink-soft); font-weight:600; font-size:12px; margin:0 0 14px; }
+  .row{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; }
+  .xy-host{ width:100%; height:210px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>synth-ui — component showcase</h1>
+  <p class="sub">Every tactile control at min / mid / max and on / off. Drag knobs vertically, hold faders, flip switches, sweep the pad. Double-tap a knob or fader to reset.</p>
+
+  <div class="bar">
+    <button onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode==='dark'?'light':'dark'">☀︎ / ☾ theme</button>
+    <button onclick="setAccent('#FF5A5F')">accent ①</button>
+    <button onclick="setAccent('#3E8EF7')">accent ②</button>
+    <button onclick="setAccent('#2FBE7E')">accent ③</button>
+    <button onclick="setAccent('#9B6DFF')">accent ④</button>
+  </div>
+
+  <div class="card">
+    <h2>Knob</h2><p>Rotary look, indicator + tick marks, depth. Vertical drag = value. The Filter knob glows open as it rises.</p>
+    <div class="row" id="knobs"></div>
+  </div>
+
+  <div class="card">
+    <h2>Fader</h2><p>Grabbable cap you hold and drag; fill tracks the value.</p>
+    <div class="row" id="faders"></div>
+  </div>
+
+  <div class="card">
+    <h2>Switch</h2><p>Rocker with a flip/clunk on toggle.</p>
+    <div class="row" id="switches"></div>
+  </div>
+
+  <div class="card">
+    <h2>XY pad</h2><p>Visible puck with a fading trail — for the keyboard's X (pitch) / Y (timbre) expression. Sweep it.</p>
+    <div class="xy-host" id="xy"></div>
+  </div>
+</div>
+
+<script src="assets/synth-ui.js"></script>
+<script>
+  function setAccent(c){ document.documentElement.style.setProperty('--accent',c); }
+  const U=window.PixSynthUI;
+  // helper: make a bound native range input then mount a component on it
+  function range(min,max,val,step){ const i=document.createElement('input'); i.type='range'; i.min=min; i.max=max; i.value=val; if(step)i.step=step; i.setAttribute('value',val); return i; }
+  function mount(host,input){ host.appendChild(input); return input; }
+
+  // KNOBS — min / mid / max, plus a glowing filter knob
+  const kh=document.getElementById('knobs');
+  U.Knob(mount(kh,range(0,100,4)),   {label:'Attack · min', unit:'%'});
+  U.Knob(mount(kh,range(0,100,50)),  {label:'Release · mid', unit:'%'});
+  U.Knob(mount(kh,range(0,100,100)), {label:'Room · max', unit:'%'});
+  U.Knob(mount(kh,range(0,100,72)),  {label:'Filter · glow', unit:'%', glow:true});
+  U.Knob(mount(kh,range(60,160,100)),{label:'Tempo', format:v=>Math.round(v)+' bpm'});
+
+  // FADERS — min / mid / max
+  const fh=document.getElementById('faders');
+  U.Fader(mount(fh,range(0,100,0)),  {label:'Echo'});
+  U.Fader(mount(fh,range(0,100,35)), {label:'Repeats'});
+  U.Fader(mount(fh,range(0,100,100)),{label:'Room'});
+
+  // SWITCHES — off / on / labelled
+  const sh=document.getElementById('switches');
+  sh.appendChild(U.Toggle({label:'Birds', labelOn:'on', labelOff:'off', on:false}).el);
+  sh.appendChild(U.Toggle({label:'Octave', labelOn:'small', labelOff:'big', on:true}).el);
+  sh.appendChild(U.Toggle({label:'Motion', labelOn:'on', labelOff:'off', on:false}).el);
+
+  // XY PAD — interactive; seed a resting puck + a little trail so it reads at a glance
+  const xy=U.XYPad(document.getElementById('xy'), {interactive:true, label:'expression'});
+  requestAnimationFrame(()=>{ xy.fit(); const pts=[[.28,.7],[.4,.55],[.52,.46],[.6,.42],[.66,.4]]; pts.forEach(p=>xy.set(p[0],p[1],false)); });
+</script>
+</body>
+</html>
