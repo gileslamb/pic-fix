@@ -209,6 +209,19 @@
   .synbk{position:absolute; top:0; height:60%; background:linear-gradient(#332c26,#241f1a); border-radius:0 0 5px 5px; z-index:2;}
   .synbk.on{background:var(--accent);}
 
+  /* MADE library */
+  .madegrid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .madecard{position:relative; border-radius:20px; overflow:hidden; background:var(--glass); border:1.5px solid var(--glass-brd); box-shadow:0 8px 20px var(--shadow);}
+  .madeimg{width:100%; height:150px; object-fit:cover; display:block; cursor:pointer; background:#FFFDF9;}
+  .madeloop{display:flex; align-items:center; gap:12px; padding:16px 14px; min-height:150px;}
+  .madeloop .playloop{width:52px; height:52px; flex:none; border-radius:50%; border:none; cursor:pointer; background:var(--accent); color:#fff; font-size:20px;}
+  .madeloop b{font-family:var(--disp); font-size:15px; color:var(--ink);} .madeloop p{margin:3px 0 0; font-size:11px; font-weight:700; color:var(--ink-soft);}
+  .madekind{position:absolute; top:8px; left:8px; font-size:14px; padding:3px 8px; border-radius:99px; background:rgba(0,0,0,.4);}
+  .madedel{position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:50%; border:none; cursor:pointer; background:rgba(0,0,0,.5); color:#fff; font-size:13px;}
+  .imgview{position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; padding:22px; background:rgba(10,8,14,.82); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);} .imgview.show{display:flex;}
+  .imgview img{max-width:100%; max-height:86%; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.5);}
+  .imgview .ivclose{position:absolute; top:18px; right:18px; width:42px; height:42px; border-radius:50%; border:none; background:rgba(255,255,255,.18); color:#fff; font-size:18px; cursor:pointer;}
+
   .searchbar{display:flex; align-items:center; gap:10px; padding:13px 15px; border-radius:20px; margin-bottom:14px; background:var(--glass); border:1.5px solid var(--glass-brd);}
   .searchbar input{border:none; outline:none; font-family:var(--body); font-weight:600; font-size:15px; flex:1; background:transparent; color:var(--ink);}
   .searchbar input::placeholder{color:var(--ink-soft); opacity:.7;}
@@ -329,6 +342,7 @@
             <span class="stsep"></span>
             <button class="stbtn" id="stUndo" title="Undo">↶</button>
             <button class="stbtn" id="stRedo" title="Redo">↷</button>
+            <button class="btn ghost" id="stKeep" style="padding:8px 14px; font-size:13px;">⭐ Keep</button>
             <button class="btn ghost" id="stClear" style="padding:8px 14px; font-size:13px;">Clear</button>
           </div>
           <div class="strow" id="stSwatches">
@@ -433,6 +447,7 @@
             <span class="stlab">Loop</span>
             <select id="synBars" class="synsel"><option value="8">8</option><option value="16">16</option><option value="32">32</option><option value="64">64</option></select>
             <button class="synchip" id="synRec">● Record</button>
+            <button class="synchip" id="synKeep" disabled>⭐ Keep</button>
             <button class="synchip" id="synSave" disabled>⬇︎ Save</button>
           </div>
 
@@ -450,7 +465,15 @@
       <p class="safe">🔒 Only shows things a grown-up has said yes to.</p>
       <div id="searchResults"></div>
     </section>
+
+    <section class="panel" id="made">
+      <div class="eyebrow">Yours</div><h1 class="h1">Your creations</h1>
+      <p class="sub">Pictures you painted and tunes you made. Tap a picture to see it big, or play a loop.</p>
+      <div id="madeGallery"></div>
+    </section>
   </div>
+
+  <div class="imgview" id="imgView"><button class="ivclose" onclick="document.getElementById('imgView').classList.remove('show')" aria-label="Close">✕</button><img id="imgViewImg" src="" alt="" /></div>
 
   <div class="player" id="player">
     <div class="playerbar"><div class="ptitle" id="ptitle"></div><button class="pclose" onclick="closePlayer()" aria-label="Close">✕</button></div>
@@ -465,6 +488,7 @@
     <button data-tab="draw"><span class="navicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-4 1 1-4z"/><path d="M15 6l3 3"/></svg></span>Draw</button>
     <button data-tab="music"><span class="navicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg></span>Music</button>
     <button data-tab="search"><span class="navicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>Search</button>
+    <button data-tab="made"><span class="navicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.7 6.2.6-4.7 4.1 1.4 6.1L12 17.8 6.5 20.1l1.4-6.1L3.2 9.8l6.2-.6z"/></svg></span>Made</button>
   </div>
 </div>
 
@@ -592,6 +616,7 @@ document.getElementById('nav').addEventListener('click',e=>{
   document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
   panels.forEach(p=>p.classList.remove('active')); document.getElementById(b.dataset.tab).classList.add('active');
   if(b.dataset.tab==='draw') refitDraw();
+  if(b.dataset.tab==='made' && window.pfRenderMade) window.pfRenderMade();
   if(b.dataset.tab==='music'){ if(musicMode==='synth' && window.pfSynth) window.pfSynth.show(); }
   else if(window.pfSynth){ window.pfSynth.hide(); }
 });
@@ -758,6 +783,15 @@ document.querySelector('.drawmodes').addEventListener('click',e=>{const b=e.targ
     render(); drawBg(); syncUndo();
   }
   window.pfStudioFit=fit;
+  // Flatten the visible artwork (paper + faded trace + drawing) to a PNG blob.
+  function exportPNG(){ const w=W||dc.width, h=H||dc.height; const c=document.createElement('canvas'); c.width=w; c.height=h; const cc=c.getContext('2d');
+    cc.fillStyle='#FFFDF9'; cc.fillRect(0,0,w,h);
+    const op=parseFloat(bg.style.opacity)||0; if(op>0){ cc.globalAlpha=op; cc.drawImage(bg,0,0); cc.globalAlpha=1; }
+    cc.drawImage(dc,0,0); return new Promise(r=>c.toBlob(r,'image/png')); }
+  window.pfStudioExport=exportPNG;
+  document.getElementById('stKeep').onclick=async()=>{ const btn=document.getElementById('stKeep'); const blob=await exportPNG(); if(!blob||!window.pfLibAdd){ return; }
+    btn.disabled=true; const ok=await window.pfLibAdd({type:'picture', name:'Picture', blob}); btn.textContent=ok?'✓ Kept':'⭐ Keep'; btn.disabled=false;
+    setTimeout(()=>{ btn.textContent='⭐ Keep'; },1600); };
 
   function pos(e){ const r=dc.getBoundingClientRect();
     return { x:Math.max(0,Math.min(cw,(e.clientX-r.left)*cw/r.width)),
@@ -1105,18 +1139,18 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
     const v=spawn(midi, G.t.currentTime, null, x, y); const key='p'+e.pointerId;
     ptr.set(e.pointerId,{v,midi,keyEl:kel}); voices.set(key,v); lightKey(midi,true);
     try{kb.setPointerCapture(e.pointerId);}catch(_){}
-    if(state.arp) heldChanged(); e.preventDefault(); }
+    if(state.arp) latchNote(midi); e.preventDefault(); }
   function move(e){ const p=ptr.get(e.pointerId); if(!p) return;
     const kel=keyUnder(e.clientX,e.clientY)||p.keyEl; const midi=+kel.dataset.midi; const {x,y}=xyOf(kel,e.clientX,e.clientY);
     state.morphY=y; applyFilter();
     if(midi!==p.midi){ // moved to a new key -> retrigger
       lightKey(p.midi,false); release(p.v); voices.delete('p'+e.pointerId);
       const v=spawn(midi, G.t.currentTime, null, x, y); ptr.set(e.pointerId,{v,midi,keyEl:kel}); voices.set('p'+e.pointerId,v); lightKey(midi,true);
-      if(state.arp) heldChanged();
+      if(state.arp) latchNote(midi);
     } else if(p.v){ p.v.o.detune.setTargetAtTime(cents(x), G.t.currentTime, 0.02); if(p.v.bo) p.v.bo.detune.setTargetAtTime(cents(x), G.t.currentTime,0.02); }
     e.preventDefault(); }
   function upH(e){ const p=ptr.get(e.pointerId); if(!p) return; lightKey(p.midi,false); release(p.v);
-    voices.delete('p'+e.pointerId); ptr.delete(e.pointerId); if(state.arp) heldChanged(); }
+    voices.delete('p'+e.pointerId); ptr.delete(e.pointerId); }   // latch: released notes stay in the pattern
   kb.addEventListener('pointerdown',down); kb.addEventListener('pointermove',move);
   kb.addEventListener('pointerup',upH); kb.addEventListener('pointercancel',upH);
 
@@ -1124,11 +1158,16 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
   let running=false, timer=null, nextTime=0, step16=0, arpPos=0, arpDir=1;
   const LOOKAHEAD=0.1, TICK=25;
   function step16Dur(){ return (60/state.bpm)/4; }
-  function heldMidis(){ const s=new Set(); ptr.forEach(p=>s.add(state.mode==='explore'?snapScale(p.midi):p.midi)); return [...s].sort((a,b)=>a-b); }
-  function heldChanged(){ arpPos=0; arpDir=1; }
-  function arpPool(){ let base=heldMidis();
-    if(state.mode==='explore' && !base.length) base=[60,62,64,67,69];   // gently self-running
-    if(!base.length) return [];
+  // Latch arpeggiator: the notes you PLAY are captured and repeated. Notes tapped
+  // within PHRASE_GAP of each other build one phrase; a longer pause then a new tap
+  // starts a fresh phrase. Explore still self-runs a default until you play.
+  let latched=[], lastPlayAt=0; const PHRASE_GAP=1100;
+  function resetArp(){ arpPos=0; arpDir=1; }
+  function heldChanged(){ resetArp(); }
+  function latchNote(midi){ const now=Date.now(); if(now-lastPlayAt>PHRASE_GAP){ latched=[]; resetArp(); } lastPlayAt=now;
+    const m=state.mode==='explore'?snapScale(midi):midi; if(!latched.includes(m)) latched.push(m); }
+  function arpPool(){ let base = latched.length ? latched.slice() : (state.mode==='explore'?[60,62,64,67,69]:[]);
+    if(!base.length) return []; base.sort((a,b)=>a-b);
     const pool=[]; for(let o=0;o<state.arpoct;o++) base.forEach(m=>pool.push(m+12*o)); return pool; }
   function nextArpIndex(len){ if(state.arppat==='random') return Math.floor(Math.random()*len);
     if(state.arppat==='up'){ const i=arpPos%len; arpPos++; return i; }
@@ -1169,7 +1208,7 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
       for(let i=0;i<tail;i++) out[c][i]+=src[N+i]||0;      // wrap release tail onto the head -> seamless
     }
     lastClip={ channels:out, length:N, sampleRate:rec.sr, bpm:state.bpm, bars:state.bars };
-    rec.buf=[[],[]]; document.getElementById('synSave').disabled=false;
+    rec.buf=[[],[]]; document.getElementById('synSave').disabled=false; document.getElementById('synKeep').disabled=false;
     document.getElementById('synRec').classList.remove('rec'); document.getElementById('synRec').textContent='● Record';
     setSynNote('Loop ready ('+state.bars+' bars @ '+state.bpm+' BPM) — tap Save.'); }
   function cancelRecord(){ rec.active=false; rec.armed=false; rec.buf=[[],[]];
@@ -1234,12 +1273,16 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
   document.getElementById('synModeBtn').onclick=e=>{ state.mode = state.mode==='play'?'explore':'play';
     const ex=state.mode==='explore'; e.target.classList.toggle('explore',ex); e.target.textContent=ex?'🌈 Explore':'🎹 Play';
     if(ex && !state.arp){ state.arp=true; const a=document.getElementById('synArp'); a.classList.add('on'); a.textContent='✨ Motion: on'; }
-    setSynNote(ex?'Explore — no wrong notes, gentle motion. Slide up/down to morph.':'Play — real notes, find your tunes. Slide up/down to morph.'); heldChanged(); };
+    setSynNote(ex?'Explore — no wrong notes, gentle motion. Slide up/down to morph.':'Play — real notes, find your tunes. Slide up/down to morph.'); latched=[]; resetArp(); };
   document.getElementById('synRec').onclick=e=>{ ac(); ensureGraph(); if(rec.armed||rec.active){ cancelRecord(); setSynNote('Recording cancelled.'); return; }
-    e.target.classList.add('rec'); e.target.textContent='● Recording'; document.getElementById('synSave').disabled=true; lastClip=null; armRecord(); };
+    e.target.classList.add('rec'); e.target.textContent='● Recording'; document.getElementById('synSave').disabled=true; document.getElementById('synKeep').disabled=true; lastClip=null; armRecord(); };
   document.getElementById('synSave').onclick=()=>{ const clip=exportClip(); if(!clip) return;
     const a=document.createElement('a'); a.href=clip.url; a.download='pixfix-loop-'+state.bpm+'bpm-'+state.bars+'bars.wav'; document.body.appendChild(a); a.click(); a.remove();
     setSynNote('Saved a '+Math.round(clip.meta.seconds)+'s loop. 🎉'); };
+  document.getElementById('synKeep').onclick=async()=>{ const clip=exportClip(); if(!clip||!window.pfLibAdd) return;
+    const btn=document.getElementById('synKeep'); btn.disabled=true; btn.textContent='…';
+    const ok=await window.pfLibAdd({type:'loop', name:'Loop', blob:clip.blob, bpm:lastClip.bpm, bars:lastClip.bars});
+    btn.textContent=ok?'✓ Kept':'⭐ Keep'; btn.disabled=false; setSynNote(ok?'Kept in your Made library 🎵':'Could not keep it.'); };
 
   /* ---- show / hide / fit ---- */
   function show(){ buildKeysOnce(); fitViz(); startClock(); vizOn=true; requestAnimationFrame(drawViz); }
@@ -1248,7 +1291,49 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
     document.querySelectorAll('.synwk.on,.synbk.on').forEach(k=>k.classList.remove('on')); }
   let keysBuilt=false; function buildKeysOnce(){ if(keysBuilt) return; buildKeys(); keysBuilt=true; }
   window.addEventListener('resize',()=>{ if(!synthMode.hidden){ fitViz(); } });
-  window.pfSynth={ show, hide, fit:()=>{fitViz();}, exportClip, panic, _state:state };
+  window.pfSynth={ show, hide, fit:()=>{fitViz();}, exportClip, panic, _state:state, _arp:()=>({latched:latched.slice(),pool:arpPool()}) };
+})();
+
+/* ============================================================================
+   MADE — a little on-device library of the child's own creations (synth loops +
+   drawings). Blobs are large, so they live in IndexedDB (offline-safe, no deps).
+   Drawing 'Keep' -> PNG blob; synth 'Keep' -> the recorded WAV blob.
+   ==========================================================================*/
+(function(){
+  const DBN='pixfix', ST='creations';
+  function db(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DBN,1);
+    r.onupgradeneeded=()=>{ const d=r.result; if(!d.objectStoreNames.contains(ST)) d.createObjectStore(ST,{keyPath:'id',autoIncrement:true}); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+  async function add(rec){ const d=await db(); return new Promise((res,rej)=>{ const tx=d.transaction(ST,'readwrite'); tx.objectStore(ST).add(rec); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); }); }
+  async function all(){ const d=await db(); return new Promise((res,rej)=>{ const tx=d.transaction(ST,'readonly'); const q=tx.objectStore(ST).getAll(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error); }); }
+  async function del(id){ const d=await db(); return new Promise(res=>{ const tx=d.transaction(ST,'readwrite'); tx.objectStore(ST).delete(id); tx.oncomplete=()=>res(true); }); }
+
+  const view=document.getElementById('imgView'), viewImg=document.getElementById('imgViewImg');
+  function showImage(url){ viewImg.src=url; view.classList.add('show'); }
+  let curAudio=null;
+  function stopAudio(){ if(curAudio){ try{curAudio.pause();}catch(_){}} curAudio=null; document.querySelectorAll('.playloop').forEach(b=>b.textContent='▶'); }
+
+  async function render(){ const box=document.getElementById('madeGallery'); if(!box) return; let items;
+    try{ items=await all(); }catch(e){ box.innerHTML='<div class="empty">Can’t open the library on this device.</div>'; return; }
+    items.sort((a,b)=>b.created-a.created);
+    if(!items.length){ box.innerHTML='<div class="empty">Nothing kept yet.<br>Paint in <b>Draw</b> or make a loop in <b>Music</b>, then tap <b>⭐ Keep</b>.</div>'; return; }
+    stopAudio(); box.innerHTML=''; const grid=document.createElement('div'); grid.className='madegrid';
+    items.forEach(it=>{ const url=URL.createObjectURL(it.blob); const card=document.createElement('div'); card.className='madecard';
+      if(it.type==='picture'){ const img=document.createElement('img'); img.className='madeimg'; img.src=url; img.onclick=()=>showImage(url); card.appendChild(img);
+        const k=document.createElement('span'); k.className='madekind'; k.textContent='🎨'; card.appendChild(k); }
+      else { const d=document.createElement('div'); d.className='madeloop';
+        d.innerHTML='<button class="playloop">▶</button><div><b>'+(it.name||'Loop')+'</b><p>'+(it.bars||'')+' bars · '+(it.bpm||'')+' BPM</p></div>';
+        const a=new Audio(url); a.loop=true; const btn=d.querySelector('.playloop');
+        btn.onclick=()=>{ if(a.paused){ stopAudio(); a.play().catch(()=>{}); curAudio=a; btn.textContent='⏸'; } else { a.pause(); curAudio=null; btn.textContent='▶'; } };
+        card.appendChild(d); const k=document.createElement('span'); k.className='madekind'; k.textContent='🎵'; card.appendChild(k); }
+      const rm=document.createElement('button'); rm.className='madedel'; rm.textContent='🗑'; rm.setAttribute('aria-label','Delete');
+      rm.onclick=async()=>{ stopAudio(); await del(it.id); render(); }; card.appendChild(rm);
+      grid.appendChild(card);
+    });
+    box.appendChild(grid);
+  }
+  window.pfLibAdd=async(rec)=>{ rec.created=Date.now(); try{ await add(rec); return true; }catch(e){ return false; } };
+  window.pfRenderMade=render;
 })();
 
 /* SEARCH + category */
