@@ -11,7 +11,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Pixfix" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<link rel="apple-touch-icon" href="https://imagedelivery.net/GhryEtlvYEhygxHE3JS6Bg/0652b44b-8104-4044-da17-7e7147fc9b00/public" />
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -216,7 +218,7 @@
 <div class="app">
   <div class="hero">
     <div class="hctl left"><button class="roundbtn" id="themeBtn" title="Themes">🎨</button><button class="roundbtn paint" id="paintBtn" title="Make it yours">✏️</button></div>
-    <div class="hctl right"><button class="roundbtn" id="modeBtn" title="Light / dark">🌙</button><div class="who"><span class="av">G</span> Gabriela</div></div>
+    <div class="hctl right"><button class="roundbtn" id="modeBtn" title="Light / dark">🌙</button><button class="roundbtn" id="parentBtn" title="Grown-ups">🔒</button><div class="who"><span class="av">G</span> Gabriela</div></div>
     <img class="painting" id="heroImg" src="assets/pixfix-logo.png" alt="Gabriella's Pixfix" />
     <div class="heroFallback" id="heroFallback">Pix<b>fix</b></div>
   </div>
@@ -262,8 +264,9 @@
 
     <section class="panel" id="music">
       <div class="eyebrow">Make · Piano Book 1</div><h1 class="h1">Play the piano</h1>
-      <p class="sub">Every note has its own colour. Tap to play — or learn a song.</p>
+      <p class="sub">Every note has its own colour. Pick a song to play or learn — or just tap freely.</p>
       <div class="pianowrap">
+        <div class="tmpls" id="musicTunes"></div>
         <div class="pctls">
           <button class="pbtn" id="playSong">▶ Play Twinkle Twinkle</button>
           <button class="pbtn ghost" id="teachSong">✨ Follow the lights</button>
@@ -324,16 +327,42 @@
 })();
 
 const GROUPS={make:{label:"Make",color:"#FF5A5F"},learn:{label:"Learn",color:"#FFB01F"},move:{label:"Move",color:"#2FBE7E"},watch:{label:"Watch together",color:"#3E8EF7"},wind:{label:"Wind-down",color:"#9B6DFF"}};
-const LIBRARY=[
-  {t:"The Romans — History in a Nutshell",        g:"learn", yt:"SajyHgJTy3E"},
-  {t:"The Amazon Rainforest — World of the Wild", g:"watch", yt:"3uzucyoUe6Q"},
-  {t:"Paper butterfly — easy origami",            g:"make",  yt:"Pc50h4ZlQb8"},
-  {t:"Cosmic Kids Yoga — dance party",            g:"move",  yt:"23VdtT0vQUY"},
-  {t:"Dragons Love Tacos — read aloud",           g:"wind",  yt:"J7TY3D4mqL8"},
-];
-const TODAY=[0,1,2,3,4];
 const thumbURL=id=>`https://img.youtube.com/vi/${id}/hqdefault.jpg`;
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+/* ---------- LIBRARY ENGINE ------------------------------------------------
+   SEED  = ships inside the app. Survives any device, reinstall, cleared data.
+   LIVE  = what a grown-up added on THIS device (localStorage 'pf-lib').
+   Child-facing views read SEED + LIVE, deduped by video id, minus archived.
+   Export / "Copy as SEED" in the grown-ups panel bridges LIVE back into SEED
+   when Giles next edits this file — so device picks become durable.        */
+const SEED=[
+  {t:"The Romans — History in a Nutshell",        g:"learn", yt:"SajyHgJTy3E", src:"seed"},
+  {t:"The Amazon Rainforest — World of the Wild", g:"watch", yt:"3uzucyoUe6Q", src:"seed"},
+  {t:"Paper butterfly — easy origami",            g:"make",  yt:"Pc50h4ZlQb8", src:"seed"},
+  {t:"Cosmic Kids Yoga — dance party",            g:"move",  yt:"23VdtT0vQUY", src:"seed"},
+  {t:"Dragons Love Tacos — read aloud",           g:"wind",  yt:"J7TY3D4mqL8", src:"seed"},
+];
+function loadLive(){try{return JSON.parse(store.get('pf-lib')||'[]')}catch(e){return []}}
+function saveLive(a){store.set('pf-lib',JSON.stringify(a))}
+function allItems(){                       // seed + live, deduped by id (live wins so a parent can re-tag / archive a seed item)
+  const m=new Map(); SEED.forEach(it=>m.set(it.yt,{...it}));
+  loadLive().forEach(it=>m.set(it.yt,{...(m.get(it.yt)||{}),...it,src:it.src||'parent'}));
+  return [...m.values()];
+}
+function childLibrary(){return allItems().filter(it=>!it.archived)}
+function archivedItems(){return allItems().filter(it=>it.archived)}
+function pickToday(lib){                    // one per food group, in order, then top up to 5
+  const out=[],seen=new Set();
+  Object.keys(GROUPS).forEach(g=>{const it=lib.find(x=>x.g===g&&!seen.has(x.yt)); if(it){out.push(it.yt);seen.add(it.yt);}});
+  for(const it of lib){ if(out.length>=5)break; if(!seen.has(it.yt)){out.push(it.yt);seen.add(it.yt);} }
+  return out;
+}
+let LIBRARY=childLibrary();
+let TODAY=(()=>{ let saved=null; try{saved=JSON.parse(store.get('pf-today')||'null')}catch(e){}
+  const ids=(saved&&saved.length?saved:pickToday(LIBRARY)).filter(id=>LIBRARY.some(it=>it.yt===id));
+  return (ids.length?ids:pickToday(LIBRARY)).map(id=>LIBRARY.findIndex(it=>it.yt===id)).filter(i=>i>-1);
+})();
 
 /* theme + mode */
 const root=document.documentElement;
@@ -375,7 +404,7 @@ function renderDoodles(t){
     `<div class="doodle ${DCLS[i%DCLS.length]}" style="${DPOS[i%DPOS.length]}"><svg width="${DSZ[i%DSZ.length]}" height="${DSZ[i%DSZ.length]}" viewBox="0 0 40 40">${svg}</svg></div>`
   ).join('');
 }
-function applyTheme(t){root.dataset.theme=t; store.set('pf-theme',t); renderDoodles(t); document.querySelectorAll('.swatchbtn').forEach(b=>b.classList.toggle('on',b.dataset.theme===t));}
+function applyTheme(t){root.dataset.theme=t; store.set('pf-theme',t); renderDoodles(t); document.querySelectorAll('.swatchbtn').forEach(b=>b.classList.toggle('on',b.dataset.theme===t)); if(window.pfBuildTemplates) window.pfBuildTemplates(t);}
 function applyMode(m){root.dataset.mode=m; store.set('pf-mode',m); document.getElementById('modeBtn').textContent=m==='dark'?'☀️':'🌙';
   document.querySelector('meta[name=theme-color]').setAttribute('content', m==='dark'?'#14121C':'#FFFDF9');
   document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));}
@@ -438,23 +467,64 @@ function closePlayer(){document.getElementById('player').classList.remove('show'
 
 /* WATCH */
 const wg=document.getElementById('watchGrid');
-LIBRARY.forEach(it=>{const grp=GROUPS[it.g];
-  const art=it.yt?`<div class="art" style="background:#0B0A0C"><img class="ytthumb" src="${thumbURL(it.yt)}" alt="" /><span class="playbadge">▶</span></div>`:`<div class="art" style="background:${grp.color}">${it.e}</div>`;
+function tileFor(it){const grp=GROUPS[it.g]||GROUPS.watch;
+  const art=it.yt?`<div class="art" style="background:#0B0A0C"><img class="ytthumb" src="${thumbURL(it.yt)}" alt="" /><span class="playbadge">▶</span></div>`:`<div class="art" style="background:${grp.color}">${it.e||''}</div>`;
   const tile=document.createElement('div'); tile.className='tile'; tile.innerHTML=art+`<span class="tag" style="background:${grp.color}">${grp.label}</span><h4>${it.t}</h4>`;
-  tile.onclick=()=>{ if(it.yt) openPlayer(it); }; wg.appendChild(tile);});
+  tile.onclick=()=>{ if(it.yt) openPlayer(it); }; return tile;}
+function buildWatch(){
+  wg.innerHTML='';
+  LIBRARY.forEach(it=>wg.appendChild(tileFor(it)));
+  const arch=archivedItems();
+  if(arch.length){
+    const more=document.createElement('button'); more.className='morebtn'; more.textContent='More things ▾';
+    const box=document.createElement('div'); box.className='grid'; box.style.display='none'; box.style.marginTop='12px';
+    arch.forEach(it=>box.appendChild(tileFor(it)));
+    more.onclick=()=>{const open=box.style.display==='none'; box.style.display=open?'grid':'none'; more.textContent=open?'Fewer ▴':'More things ▾';};
+    wg.after(more,box);
+  }
+}
+buildWatch();
 
 /* DRAW + colouring templates */
-const TEMPLATES={
-  Blank:'',
-  Butterfly:'<svg viewBox="0 0 200 170" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 24v122"/><circle cx="100" cy="24" r="6"/><path d="M100 24 90 8M100 24 110 8"/><ellipse cx="60" cy="64" rx="44" ry="36"/><ellipse cx="140" cy="64" rx="44" ry="36"/><ellipse cx="68" cy="126" rx="32" ry="28"/><ellipse cx="132" cy="126" rx="32" ry="28"/></svg>',
-  Flower:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6"><circle cx="100" cy="100" r="24"/><circle cx="100" cy="54" r="24"/><circle cx="100" cy="146" r="24"/><circle cx="54" cy="100" r="24"/><circle cx="146" cy="100" r="24"/><circle cx="67" cy="67" r="24"/><circle cx="133" cy="67" r="24"/><circle cx="67" cy="133" r="24"/><circle cx="133" cy="133" r="24"/></svg>',
+/* Draw patterns — a set per theme, rebuilt whenever the theme changes.
+   Simple single-colour outlines sized to the board, for tracing / colouring-in. */
+const SH={
   Star:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 16l24 54 59 5-45 39 14 58-52-31-52 31 14-58-45-39 59-5z"/></svg>',
-  Heart:'<svg viewBox="0 0 200 180" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 158C42 120 22 82 22 56 22 32 41 16 63 16 81 16 95 29 100 41 105 29 119 16 137 16 159 16 178 32 178 56 178 82 158 120 100 158z"/></svg>'
+  Heart:'<svg viewBox="0 0 200 180" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 158C42 120 22 82 22 56 22 32 41 16 63 16 81 16 95 29 100 41 105 29 119 16 137 16 159 16 178 32 178 56 178 82 158 120 100 158z"/></svg>',
+  Flower:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6"><circle cx="100" cy="100" r="24"/><circle cx="100" cy="54" r="24"/><circle cx="100" cy="146" r="24"/><circle cx="54" cy="100" r="24"/><circle cx="146" cy="100" r="24"/><circle cx="67" cy="67" r="24"/><circle cx="133" cy="67" r="24"/><circle cx="67" cy="133" r="24"/><circle cx="133" cy="133" r="24"/></svg>',
+  Butterfly:'<svg viewBox="0 0 200 170" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 24v122"/><circle cx="100" cy="24" r="6"/><path d="M100 24 90 8M100 24 110 8"/><ellipse cx="60" cy="64" rx="44" ry="36"/><ellipse cx="140" cy="64" rx="44" ry="36"/><ellipse cx="68" cy="126" rx="32" ry="28"/><ellipse cx="132" cy="126" rx="32" ry="28"/></svg>',
+  Rainbow:'<svg viewBox="0 0 200 130" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linecap="round"><path d="M20 118a80 80 0 0 1 160 0"/><path d="M46 118a54 54 0 0 1 108 0"/><path d="M72 118a28 28 0 0 1 56 0"/></svg>',
+  Cupcake:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M58 92h84l-13 92H71z"/><path d="M50 92c-6-30 20-50 50-50s56 20 50 50z"/><path d="M100 42V24"/><circle cx="100" cy="18" r="7"/></svg>',
+  Fish:'<svg viewBox="0 0 200 140" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M28 70c26-42 92-42 122 0-30 42-96 42-122 0z"/><path d="M150 70l30-26v52z"/><circle cx="66" cy="58" r="5"/><path d="M92 44c8 12 8 40 0 52"/></svg>',
+  Shell:'<svg viewBox="0 0 200 180" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 24C46 24 22 78 24 128h152C178 78 154 24 100 24z"/><path d="M100 24V128M66 32 78 128M134 32 122 128M42 66 54 128M158 66 146 128"/></svg>',
+  Turtle:'<svg viewBox="0 0 200 170" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><ellipse cx="100" cy="92" rx="58" ry="42"/><path d="M100 50v84M60 64l80 56M140 64l-80 56"/><circle cx="100" cy="34" r="15"/><path d="M48 120l-16 22M152 120l16 22M66 132l-6 24M134 132l6 24"/></svg>',
+  Leaf:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M100 20C42 60 42 158 100 182 158 158 158 60 100 20z"/><path d="M100 30V174"/><path d="M100 72 62 92M100 72 138 92M100 116 68 134M100 116 132 134"/></svg>',
+  Parrot:'<svg viewBox="0 0 200 180" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><ellipse cx="88" cy="98" rx="46" ry="38"/><circle cx="132" cy="60" r="26"/><path d="M156 54l24-8-14 20"/><circle cx="140" cy="56" r="4"/><path d="M52 116c-16 8-30 24-34 44M64 128c-10 12-16 30-14 44"/><path d="M44 92c26-12 30-12 48 6"/></svg>',
+  Tree:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M90 188h20v-56H90z"/><path d="M100 28c-36 0-58 28-58 56 0 32 28 50 58 50s58-18 58-50c0-28-22-56-58-56z"/></svg>',
+  Sun:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linecap="round"><circle cx="100" cy="100" r="42"/><path d="M100 22v24M100 154v24M22 100h24M154 100h24M45 45l17 17M138 138l17 17M155 45l-17 17M62 138l-17 17"/></svg>',
+  Palm:'<svg viewBox="0 0 200 200" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linecap="round"><path d="M98 188c-2-58 2-96 4-118"/><path d="M100 70C72 48 42 52 26 70M100 70c28-22 60-18 74 0M100 70c-14-28-12-52 0-64M100 70c14-26 40-34 56-30M100 70c-22-16-38-40-38-40"/></svg>',
+  Cloud:'<svg viewBox="0 0 200 150" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><path d="M54 116a32 32 0 0 1 2-64 42 42 0 0 1 80-6 30 30 0 0 1 20 70z"/></svg>',
+  Bird:'<svg viewBox="0 0 200 140" fill="none" stroke="#d7d0c8" stroke-width="2.6" stroke-linejoin="round"><ellipse cx="86" cy="82" rx="48" ry="36"/><circle cx="132" cy="56" r="22"/><path d="M152 50l22-8-14 18"/><circle cx="140" cy="52" r="4"/><path d="M40 100l-26 18M52 110l-20 22"/><path d="M40 84c26-10 30-10 46 4"/></svg>',
+};
+const THEME_TEMPLATES={
+  rainbow:    {Rainbow:SH.Rainbow, Star:SH.Star, Heart:SH.Heart, Flower:SH.Flower},
+  bubblegum:  {Heart:SH.Heart, Cupcake:SH.Cupcake, Flower:SH.Flower, Star:SH.Star},
+  rainforest: {Leaf:SH.Leaf, Parrot:SH.Parrot, Tree:SH.Tree, Butterfly:SH.Butterfly},
+  ocean:      {Fish:SH.Fish, Shell:SH.Shell, Turtle:SH.Turtle, Starfish:SH.Star},
+  sunset:     {Sun:SH.Sun, Palm:SH.Palm, Cloud:SH.Cloud, Bird:SH.Bird},
 };
 const tmplsEl=document.getElementById('tmpls'), tmplEl=document.getElementById('tmpl');
-Object.keys(TEMPLATES).forEach((k,i)=>{const b=document.createElement('button'); b.className='tbtn'+(i===0?' on':''); b.textContent=k;
-  b.onclick=()=>{document.querySelectorAll('.tbtn').forEach(x=>x.classList.remove('on')); b.classList.add('on'); tmplEl.innerHTML=TEMPLATES[k]; clearPad();};
-  tmplsEl.appendChild(b);});
+function buildTemplates(theme){
+  const set=THEME_TEMPLATES[theme]||THEME_TEMPLATES.rainbow;
+  const entries=Object.assign({Blank:''},set);
+  tmplsEl.innerHTML='';
+  Object.keys(entries).forEach((k,i)=>{const b=document.createElement('button'); b.className='tbtn'+(i===0?' on':''); b.textContent=k;
+    b.onclick=()=>{tmplsEl.querySelectorAll('.tbtn').forEach(x=>x.classList.remove('on')); b.classList.add('on'); tmplEl.innerHTML=entries[k]; clearPad();};
+    tmplsEl.appendChild(b);});
+  tmplEl.innerHTML='';
+}
+window.pfBuildTemplates=buildTemplates;
+buildTemplates(document.documentElement.dataset.theme||'rainbow');
 const cv=document.getElementById('pad'), ctx=cv.getContext('2d'); let drawing=false,color="#FF5A5F",brush=5,last=null;
 function fitCanvas(){const b=document.getElementById('board'); const w=b.clientWidth,h=b.clientHeight; if(cv.width===w&&cv.height===h) return;
   const img=cv.width?ctx.getImageData(0,0,cv.width,cv.height):null; cv.width=w; cv.height=h; ctx.lineCap='round'; ctx.lineJoin='round'; if(img) ctx.putImageData(img,0,0);}
@@ -500,23 +570,57 @@ function light(id,ms){const el=keyEl(id); if(!el) return; el.classList.add('lit'
 function hitKey(id){const n=noteById[id]; if(!n) return; tone(n.f); light(id);
   if(teachMode){ if(id===SEQ[gi].id){ advanceTeach(); } }}
 
-/* Twinkle Twinkle (C major) */
-const SEQ=[["C4",500],["C4",500],["G4",500],["G4",500],["A4",500],["A4",500],["G4",900],
-  ["F4",500],["F4",500],["E4",500],["E4",500],["D4",500],["D4",500],["C4",900],
-  ["G4",500],["G4",500],["F4",500],["F4",500],["E4",500],["E4",500],["D4",900],
-  ["G4",500],["G4",500],["F4",500],["F4",500],["E4",500],["E4",500],["D4",900],
-  ["C4",500],["C4",500],["G4",500],["G4",500],["A4",500],["A4",500],["G4",900],
-  ["F4",500],["F4",500],["E4",500],["E4",500],["D4",500],["D4",500],["C4",1000]]
-  .map(([id,d])=>({id,d}));
+/* Tune library — all within the one-octave C4–C5 keyboard, C-position friendly */
+const TUNES=[
+  {name:"Twinkle, Twinkle", seq:[["C4",500],["C4",500],["G4",500],["G4",500],["A4",500],["A4",500],["G4",900],
+    ["F4",500],["F4",500],["E4",500],["E4",500],["D4",500],["D4",500],["C4",900],
+    ["G4",500],["G4",500],["F4",500],["F4",500],["E4",500],["E4",500],["D4",900],
+    ["G4",500],["G4",500],["F4",500],["F4",500],["E4",500],["E4",500],["D4",900],
+    ["C4",500],["C4",500],["G4",500],["G4",500],["A4",500],["A4",500],["G4",900],
+    ["F4",500],["F4",500],["E4",500],["E4",500],["D4",500],["D4",500],["C4",1000]]},
+  {name:"Hot Cross Buns", seq:[["E4",500],["D4",500],["C4",900],["E4",500],["D4",500],["C4",900],
+    ["C4",300],["C4",300],["C4",300],["C4",300],["D4",300],["D4",300],["D4",300],["D4",300],
+    ["E4",500],["D4",500],["C4",1000]]},
+  {name:"Mary Had a Little Lamb", seq:[["E4",500],["D4",500],["C4",500],["D4",500],["E4",500],["E4",500],["E4",900],
+    ["D4",500],["D4",500],["D4",900],["E4",500],["G4",500],["G4",900],
+    ["E4",500],["D4",500],["C4",500],["D4",500],["E4",500],["E4",500],["E4",500],["E4",500],
+    ["D4",500],["D4",500],["E4",500],["D4",500],["C4",1000]]},
+  {name:"Ode to Joy", seq:[["E4",500],["E4",500],["F4",500],["G4",500],["G4",500],["F4",500],["E4",500],["D4",500],
+    ["C4",500],["C4",500],["D4",500],["E4",500],["E4",700],["D4",300],["D4",900],
+    ["E4",500],["E4",500],["F4",500],["G4",500],["G4",500],["F4",500],["E4",500],["D4",500],
+    ["C4",500],["C4",500],["D4",500],["E4",500],["D4",700],["C4",300],["C4",1000]]},
+  {name:"London Bridge", seq:[["G4",500],["A4",500],["G4",500],["F4",500],["E4",500],["F4",500],["G4",900],
+    ["D4",500],["E4",500],["F4",900],["E4",500],["F4",500],["G4",900],
+    ["G4",500],["A4",500],["G4",500],["F4",500],["E4",500],["F4",500],["G4",900],
+    ["D4",500],["G4",500],["E4",500],["C4",1000]]},
+  {name:"When the Saints", seq:[["C4",500],["E4",500],["F4",500],["G4",1000],["C4",500],["E4",500],["F4",500],["G4",1000],
+    ["C4",500],["E4",500],["F4",500],["G4",500],["E4",500],["C4",500],["E4",500],["D4",900],
+    ["E4",500],["E4",500],["D4",500],["C4",1000]]},
+];
+let curTune=0;
+function activeTunes(){let a;try{a=JSON.parse(store.get('pf-tunes')||'null')}catch(e){a=null}
+  const names=TUNES.map(t=>t.name); const list=(a&&a.length?a:names).filter(n=>names.includes(n));
+  return list.length?list:names;}
+let SEQ=TUNES[0].seq.map(([id,d])=>({id,d}));
 let playing=false, teachMode=false, gi=0;
 const playBtn=document.getElementById('playSong'), teachBtn=document.getElementById('teachSong'), pnote=document.getElementById('pianoNote');
-function stopAll(){playing=false; teachMode=false; gi=0; clearHighlights(); playBtn.textContent='▶ Play Twinkle Twinkle'; teachBtn.textContent='✨ Follow the lights'; pnote.textContent='🎵 Free play — press any keys, as many as you like at once.';}
+const tunesEl=document.getElementById('musicTunes');
+function loadTune(i){curTune=i; SEQ=TUNES[i].seq.map(([id,d])=>({id,d})); stopAll();
+  tunesEl.querySelectorAll('.tbtn').forEach(b=>b.classList.toggle('on',+b.dataset.i===i));}
+function buildTunePicker(){tunesEl.innerHTML=''; const active=activeTunes();
+  TUNES.forEach((t,i)=>{ if(!active.includes(t.name))return;
+    const b=document.createElement('button'); b.className='tbtn'+(i===curTune?' on':''); b.textContent=t.name; b.dataset.i=i;
+    b.onclick=()=>loadTune(i); tunesEl.appendChild(b);});
+  if(!active.includes(TUNES[curTune].name)){const first=TUNES.findIndex(t=>active.includes(t.name)); if(first>-1)loadTune(first);}
+}
+function stopAll(){playing=false; teachMode=false; gi=0; clearHighlights(); playBtn.textContent='▶ Play '+TUNES[curTune].name; teachBtn.textContent='✨ Follow the lights'; pnote.textContent='🎵 Free play — press any keys, as many as you like at once.';}
 function clearHighlights(){pianoEl.querySelectorAll('.next').forEach(e=>e.classList.remove('next'));}
-playBtn.onclick=()=>{ if(playing){stopAll(); return;} stopAll(); playing=true; playBtn.textContent='⏹ Stop'; pnote.textContent='🎶 Playing Twinkle Twinkle — watch the keys light up.'; let i=0;
+playBtn.onclick=()=>{ if(playing){stopAll(); return;} stopAll(); playing=true; playBtn.textContent='⏹ Stop'; pnote.textContent='🎶 Playing '+TUNES[curTune].name+' — watch the keys light up.'; let i=0;
   (function step(){ if(!playing||i>=SEQ.length){stopAll(); return;} const s=SEQ[i]; tone(noteById[s.id].f); light(s.id,Math.min(s.d-60,700)); i++; setTimeout(step,s.d); })(); };
 teachBtn.onclick=()=>{ if(teachMode){stopAll(); return;} stopAll(); teachMode=true; gi=0; teachBtn.textContent='⏹ Stop'; pnote.textContent='✨ Follow the lights — press the glowing key. You do it!'; showNext(); };
 function showNext(){clearHighlights(); if(gi<SEQ.length){const el=keyEl(SEQ[gi].id); if(el) el.classList.add('next');}}
 function advanceTeach(){gi++; if(gi>=SEQ.length){clearHighlights(); pnote.textContent='🌟 You played the whole song! Amazing.'; teachMode=false; teachBtn.textContent='✨ Follow the lights'; return;} showNext();}
+buildTunePicker(); playBtn.textContent='▶ Play '+TUNES[curTune].name;
 
 /* SEARCH + category */
 const si=document.getElementById('searchInput'), sr=document.getElementById('searchResults'), catsEl=document.getElementById('cats');
@@ -536,6 +640,316 @@ function renderSearch(q){q=q.trim().toLowerCase(); sr.innerHTML='';
     r.onclick=()=>{ if(it.yt) openPlayer(it); }; sr.appendChild(r);});}
 si.addEventListener('input',e=>renderSearch(e.target.value)); renderSearch('');
 window.addEventListener('resize',()=>{ if(document.getElementById('draw').classList.contains('active')) fitCanvas(); });
+
+/* ========================================================================
+   GROWN-UPS LAYER  (Phase A — manual curation, no API keys, no backend)
+   Entry: 🔒 in the header → a maths-sum gate → the curation panel.
+   Flow:  answer a few questions → get real YouTube search prompts →
+          search on YouTube → paste the links you liked → the app tags each
+          by food group / page automatically and the player updates live.
+   ===================================================================== */
+
+/* ---- styling (injected so the big CSS block above stays untouched) ---- */
+(function(){const s=document.createElement('style'); s.textContent=`
+  .morebtn{display:block;margin:16px auto 0;font-family:var(--disp);font-weight:700;font-size:13px;color:var(--accent);background:var(--glass);border:1.5px solid var(--glass-brd);border-radius:99px;padding:8px 18px;cursor:pointer;}
+  .vidstrip{margin-top:18px;}
+  .vidstrip h3{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--ink-soft);margin:0 0 10px;}
+  .vidrow{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;}
+  .vidrow .vt{flex:0 0 150px;cursor:pointer;}
+  .vidrow .vt .art{position:relative;height:86px;border-radius:16px;overflow:hidden;background:#0B0A0C;box-shadow:0 6px 16px var(--shadow);}
+  .vidrow .vt .art img{width:100%;height:100%;object-fit:cover;}
+  .vidrow .vt .art .playbadge{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:22px;text-shadow:0 2px 8px rgba(0,0,0,.6);}
+  .vidrow .vt h5{font-family:var(--disp);font-weight:700;font-size:12px;margin:7px 2px 0;color:var(--ink);line-height:1.25;}
+  .pf-modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(20,18,28,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+  .pf-modal.show{display:flex;}
+  .pf-card{width:100%;max-width:360px;background:var(--paper);border-radius:26px;padding:26px;box-shadow:0 24px 60px var(--shadow);text-align:center;}
+  .pf-card h2{font-family:var(--disp);font-weight:700;color:var(--ink);margin:0 0 6px;font-size:22px;}
+  .pf-card p{color:var(--ink-soft);font-size:14px;margin:0 0 16px;}
+  .pf-sum{font-family:var(--disp);font-weight:700;font-size:30px;color:var(--accent);margin:4px 0 14px;}
+  .pf-in{width:100%;font-family:var(--body);font-weight:700;font-size:16px;padding:13px 15px;border-radius:16px;border:1.5px solid var(--glass-brd);background:var(--glass);color:var(--ink);box-sizing:border-box;}
+  .pf-err{color:#E5484D;font-size:13px;font-weight:700;min-height:18px;margin-top:8px;}
+  .pf-sheet{position:fixed;inset:0;z-index:55;display:none;flex-direction:column;background:var(--paper);}
+  .pf-sheet.show{display:flex;}
+  .pf-top{display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;border-bottom:1.5px solid var(--glass-brd);}
+  .pf-top h2{font-family:var(--disp);font-weight:700;font-size:19px;color:var(--ink);margin:0;flex:1;}
+  .pf-x{background:var(--glass);border:1.5px solid var(--glass-brd);border-radius:50%;width:38px;height:38px;font-size:17px;color:var(--ink);cursor:pointer;}
+  .pf-body{flex:1;overflow-y:auto;padding:18px;-webkit-overflow-scrolling:touch;}
+  .pf-tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+  .pf-tab{font-family:var(--disp);font-weight:700;font-size:13px;padding:8px 15px;border-radius:99px;cursor:pointer;background:var(--glass);border:1.5px solid var(--glass-brd);color:var(--ink);}
+  .pf-tab.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .pf-view{display:none;} .pf-view.on{display:block;}
+  .pf-q{background:var(--glass);border:1.5px solid var(--glass-brd);border-radius:20px;padding:15px;margin-bottom:14px;}
+  .pf-q .qh{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+  .pf-q .qh .badge{font-family:var(--disp);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#fff;padding:3px 9px;border-radius:99px;}
+  .pf-q label{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--ink);display:block;margin-bottom:8px;}
+  .pf-q .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .pf-q .row .pf-in{flex:1;min-width:150px;}
+  .pf-mini{font-family:var(--disp);font-weight:700;font-size:12px;padding:9px 13px;border-radius:14px;border:none;cursor:pointer;background:var(--accent);color:#fff;white-space:nowrap;}
+  .pf-mini.ghost{background:var(--glass);color:var(--ink);border:1.5px solid var(--glass-brd);}
+  .pf-paste{width:100%;min-height:64px;margin-top:10px;font-family:var(--body);font-size:13px;padding:11px 13px;border-radius:14px;border:1.5px solid var(--glass-brd);background:var(--paper);color:var(--ink);box-sizing:border-box;resize:vertical;}
+  .pf-stage{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .pf-chip{display:flex;align-items:center;gap:9px;background:var(--paper);border:1.5px solid var(--glass-brd);border-radius:14px;padding:7px 9px;}
+  .pf-chip img{width:52px;height:34px;object-fit:cover;border-radius:8px;flex:none;background:#0B0A0C;}
+  .pf-chip input{flex:1;min-width:60px;font-family:var(--body);font-size:13px;padding:7px 9px;border-radius:10px;border:1.5px solid var(--glass-brd);background:var(--glass);color:var(--ink);}
+  .pf-chip .rm{background:none;border:none;color:var(--ink-soft);font-size:17px;cursor:pointer;}
+  .pf-item{display:flex;align-items:center;gap:11px;padding:9px;border-radius:16px;background:var(--glass);border:1.5px solid var(--glass-brd);margin-bottom:9px;}
+  .pf-item img{width:58px;height:38px;object-fit:cover;border-radius:9px;flex:none;background:#0B0A0C;}
+  .pf-item .meta{flex:1;min-width:0;}
+  .pf-item .meta h4{font-family:var(--disp);font-weight:700;font-size:13px;margin:0;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pf-item .meta .tags{margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;}
+  .pf-item .meta .t{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#fff;padding:2px 7px;border-radius:99px;}
+  .pf-item .act{background:none;border:none;font-size:15px;cursor:pointer;color:var(--ink-soft);}
+  .pf-note{font-size:12px;color:var(--ink-soft);line-height:1.5;margin:2px 0 16px;}
+  .pf-ta{width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:11px;padding:12px;border-radius:14px;border:1.5px solid var(--glass-brd);background:var(--glass);color:var(--ink);box-sizing:border-box;}
+  .pf-soon{opacity:.55;pointer-events:none;}
+  .pf-ok{color:var(--move);font-weight:700;font-size:13px;min-height:18px;margin-top:6px;}
+`; document.head.appendChild(s);})();
+
+/* ---- video-id parsing (youtu.be, watch?v=, /shorts/, /embed/, bare id) ---- */
+function parseIds(text){const ids=[]; const seen=new Set();
+  (String(text).match(/\S+/g)||[]).forEach(tok=>{
+    let id=null; const m=tok.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([A-Za-z0-9_-]{11})/);
+    if(m) id=m[1]; else if(/^[A-Za-z0-9_-]{11}$/.test(tok)) id=tok;
+    if(id&&!seen.has(id)){seen.add(id); ids.push(id);}
+  }); return ids;}
+
+/* ---- Piano tunes: parent chooses which show on the Music page ---- */
+function setTuneActive(name,on){let a=activeTunes(); if(on){if(!a.includes(name))a.push(name);} else {a=a.filter(n=>n!==name);}
+  store.set('pf-tunes',JSON.stringify(a)); buildTunePicker();}
+
+
+/* ---- deck + global refresh ---- */
+function refreshAll(){
+  LIBRARY=childLibrary();
+  let ids; try{ids=JSON.parse(store.get('pf-today')||'null')}catch(e){ids=null}
+  ids=(ids&&ids.length?ids:pickToday(LIBRARY)).filter(id=>LIBRARY.some(it=>it.yt===id));
+  if(!ids.length) ids=pickToday(LIBRARY);
+  store.set('pf-today',JSON.stringify(ids));
+  TODAY=ids.map(id=>LIBRARY.findIndex(it=>it.yt===id)).filter(i=>i>-1);
+  doneSet=new Set();
+  renderDeck(); checkDone(); buildWatch(); renderSearch(si.value||'');
+  if(document.getElementById('pfManager')) renderManager();
+}
+
+/* ---- the questions → prompt → search → paste blocks ---- */
+const PROMPTS=[
+  {q:"What are they learning at school right now?", ph:"e.g. the Romans, volcanoes, the water cycle", g:'learn', mk:v=>`${v} explained for kids`},
+  {q:"Anywhere they're going or curious about?",    ph:"e.g. Italy, the seaside, ancient Egypt",     g:'learn', mk:v=>`${v} facts and sights for kids`},
+  {q:"What are they into this week?",                ph:"e.g. dinosaurs, space, football",            g:'watch', mk:v=>`${v} for kids`},
+  {q:"Fancy making something? Crafts, drawing…",     ph:"e.g. draw a dragon, origami, salt dough",    g:'make',  mk:v=>`how to ${v} easy step by step for kids`},
+  {q:"Something to get them moving?",                ph:"e.g. dance along, kids yoga, football drills",g:'move',  mk:v=>`${v} for kids follow along`},
+  {q:"Something calm for wind-down?",                ph:"e.g. bedtime story, calm piano",             g:'wind',  mk:v=>`${v} read aloud calm for kids`},
+];
+
+/* ---- build the whole grown-ups sheet (DOM) ---- */
+const sheet=document.createElement('div'); sheet.className='pf-sheet'; sheet.id='pfSheet';
+sheet.innerHTML=`
+  <div class="pf-top"><h2>Grown-ups</h2><button class="pf-x" id="pfClose" aria-label="Close">✕</button></div>
+  <div class="pf-body">
+    <div class="pf-tabs">
+      <button class="pf-tab on" data-v="guide">Start here</button>
+      <button class="pf-tab" data-v="add">Add videos</button>
+      <button class="pf-tab" data-v="lib">Library</button>
+      <button class="pf-tab" data-v="tunes">Tunes</button>
+      <button class="pf-tab" data-v="arch">Previous</button>
+      <button class="pf-tab" data-v="back">Backup</button>
+    </div>
+    <div class="pf-view on" id="pfGuide">
+      <div class="pf-q"><label>What Pixfix is</label>
+        <p class="pf-note" style="margin:0;">A calm, <b>finite</b> space — the opposite of an endless feed. Each day is a short deck of five things that <b>ends</b> when they're done. Everything in it is chosen by you.</p></div>
+      <div class="pf-q"><label>The golden rule</label>
+        <p class="pf-note" style="margin:0;">Nothing reaches your child until you add it here. There's no open search, no autoplay, no “up next”, no rabbit hole — just the list you've approved.</p></div>
+      <div class="pf-q"><label>Adding a video (about a minute)</label>
+        <p class="pf-note" style="margin:0;">Go to <b>Add videos</b>, answer a question that fits, and tap <b>Search on YouTube</b> — it opens YouTube in your browser. When you find something good, copy its link, come back here, paste it in that question's box and tap <b>Add</b>. It's filed automatically into the right food group. Then flip back to Pixfix.</p></div>
+      <div class="pf-q"><label>The five food groups</label>
+        <p class="pf-note" style="margin:0;">A balanced day, not just screen-time rationed: <b>Make · Learn · Move · Watch together · Wind-down</b>. The home deck picks one of each and stops when the five are done.</p></div>
+      <div class="pf-q"><label>Music &amp; drawing</label>
+        <p class="pf-note" style="margin:0;">The <b>piano</b> page plays real beginner songs — choose which ones appear in the <b>Tunes</b> tab. The <b>drawing</b> page shows colouring patterns that match whatever theme your child has picked, so there's nothing to set there.</p></div>
+      <div class="pf-q"><label>Keep it safe &amp; backed up</label>
+        <p class="pf-note" style="margin:0;">What you add lives on <b>this iPad only</b> for now — visit <b>Backup</b> now and then to save a copy. To pin the iPad to Pixfix during a session, triple-click the side button for <b>Guided Access</b>.</p></div>
+    </div>
+    <div class="pf-view" id="pfAdd">
+      <p class="pf-note">Answer what fits, tap <b>Search on YouTube</b>, and when you find something good, copy its link and paste it back into that question's box. Each video is filed automatically by its food group. Nothing reaches your child until you tap Add.</p>
+      <div id="pfPrompts"></div>
+      <p class="pf-ok" id="pfAddOk"></p>
+    </div>
+    <div class="pf-view" id="pfLib">
+      <p class="pf-note">Everything currently in the app. Tap ⭐ to put something in today's five-card deck, 🗄️ to move it to Previous (kept, out of rotation), 🗑️ to remove a video you added.</p>
+      <div style="display:flex;gap:8px;margin-bottom:14px;"><button class="pf-mini ghost" id="pfRebuild">↻ Rebuild today's deck</button></div>
+      <div id="pfManager"></div>
+    </div>
+    <div class="pf-view" id="pfTunes">
+      <p class="pf-note">Tick the piano songs you want on the Music page — handy for focusing on whatever they're learning this week. Play and Follow-the-lights work on any of them.</p>
+      <div id="pfTuneList"></div>
+    </div>
+    <div class="pf-view" id="pfArch">
+      <p class="pf-note">Videos you've retired. They stay here so nothing's lost, and show under “More things” on the Watch page. Tap ♻️ to bring one back.</p>
+      <div id="pfArchList"></div>
+    </div>
+    <div class="pf-view" id="pfBack">
+      <p class="pf-note">Videos you add live on this iPad. Use <b>Export</b> to back them up, <b>Import</b> to restore, or <b>Copy as SEED</b> to hand Giles a block to paste into <code>index.html</code> so the picks ship with the app on every device.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="pf-mini" id="pfExport">⬆︎ Export</button>
+        <button class="pf-mini ghost" id="pfSeed">＜／＞ Copy as SEED</button>
+        <button class="pf-mini ghost" id="pfImportBtn">⬇︎ Import</button>
+      </div>
+      <textarea class="pf-ta" id="pfBackText" placeholder="Export / SEED output appears here — or paste a backup then tap Import."></textarea>
+      <p class="pf-ok" id="pfBackOk"></p>
+      <div class="pf-q pf-soon" style="margin-top:22px;">
+        <div class="qh"><span class="badge" style="background:var(--ink-soft)">Phase B · later</span></div>
+        <label>Auto-find videos</label>
+        <p class="pf-note" style="margin:0;">A Cloudflare Worker holds the YouTube Data API key and searches with <code>safeSearch=strict</code> + <code>videoEmbeddable=true</code>. Results come back here as <b>candidates</b> with a tick to approve — same principle, nothing reaches your child un-approved. Wired once Phase A has run for a while.</p>
+      </div>
+    </div>
+  </div>`;
+document.body.appendChild(sheet);
+
+/* prompt blocks */
+const promptsWrap=sheet.querySelector('#pfPrompts');
+PROMPTS.forEach((p,pi)=>{const grp=GROUPS[p.g]; const block=document.createElement('div'); block.className='pf-q';
+  const dest=p.page==='draw'?' → Draw page':p.page==='music'?' → Music page':'';
+  block.innerHTML=`
+    <div class="qh"><span class="badge" style="background:${grp.color}">${grp.label}${dest}</span></div>
+    <label>${p.q}</label>
+    <div class="row">
+      <input class="pf-in pf-topic" data-pi="${pi}" placeholder="${p.ph}" />
+      <button class="pf-mini pf-search" data-pi="${pi}">🔎 Search on YouTube</button>
+      <button class="pf-mini ghost pf-copy" data-pi="${pi}">Copy prompt</button>
+    </div>
+    <textarea class="pf-paste" data-pi="${pi}" placeholder="Paste the YouTube links you liked here (one or many)…"></textarea>
+    <div class="row" style="margin-top:8px;"><button class="pf-mini pf-parse" data-pi="${pi}">Add these ↓</button></div>
+    <div class="pf-stage" data-pi="${pi}"></div>`;
+  promptsWrap.appendChild(block);
+});
+function promptFor(pi){const p=PROMPTS[pi]; const t=(sheet.querySelector(`.pf-topic[data-pi="${pi}"]`).value||'').trim();
+  return t?p.mk(t):p.ph.replace(/^e\.g\.\s*/,'');}
+sheet.querySelectorAll('.pf-search').forEach(b=>b.onclick=()=>{const q=promptFor(+b.dataset.pi);
+  window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(q),'_blank','noopener');});
+sheet.querySelectorAll('.pf-copy').forEach(b=>b.onclick=()=>{const q=promptFor(+b.dataset.pi);
+  (navigator.clipboard?navigator.clipboard.writeText(q):Promise.reject()).then(()=>{b.textContent='Copied ✓'; setTimeout(()=>b.textContent='Copy prompt',1200);}).catch(()=>{});});
+sheet.querySelectorAll('.pf-parse').forEach(b=>b.onclick=()=>{const pi=+b.dataset.pi; const p=PROMPTS[pi];
+  const ta=sheet.querySelector(`.pf-paste[data-pi="${pi}"]`); const stage=sheet.querySelector(`.pf-stage[data-pi="${pi}"]`);
+  const ids=parseIds(ta.value); if(!ids.length){stage.innerHTML='<p class="pf-note" style="margin:6px 0 0;">No YouTube links found in that paste.</p>'; return;}
+  const existing=new Set(allItems().map(it=>it.yt));
+  stage.innerHTML=''; let n=0;
+  ids.forEach((id,k)=>{const dup=existing.has(id);
+    const row=document.createElement('div'); row.className='pf-chip';
+    const base=promptFor(pi); const label=base.charAt(0).toUpperCase()+base.slice(1)+(ids.length>1?` (${k+1})`:'');
+    row.innerHTML=`<img src="${thumbURL(id)}" alt="" /><input value="${label.replace(/"/g,'&quot;')}" ${dup?'disabled':''} /><button class="rm" title="Remove">✕</button>`;
+    if(dup){row.style.opacity='.5'; row.querySelector('input').value='Already in the library'; }
+    row.dataset.id=id; row.querySelector('.rm').onclick=()=>row.remove(); if(!dup)n++;
+    stage.appendChild(row);});
+  const commit=document.createElement('button'); commit.className='pf-mini'; commit.style.marginTop='4px'; commit.textContent=`✓ Add ${n} to Pixfix`;
+  commit.onclick=()=>{const live=loadLive(); let added=0;
+    stage.querySelectorAll('.pf-chip').forEach(ch=>{const id=ch.dataset.id; const inp=ch.querySelector('input'); if(inp.disabled)return;
+      if(allItems().some(it=>it.yt===id))return;
+      const item={t:(inp.value||promptFor(pi)).trim(),g:p.g,yt:id,src:'parent',added:Date.now()}; if(p.page)item.page=p.page;
+      live.push(item); added++;});
+    saveLive(live); ta.value=''; stage.innerHTML='';
+    const ok=sheet.querySelector('#pfAddOk'); ok.textContent=`Added ${added} video${added===1?'':'s'} — Gabriela can see ${added===1?'it':'them'} now.`; setTimeout(()=>ok.textContent='',3500);
+    refreshAll();};
+  stage.appendChild(commit);
+});
+
+/* library manager + archive */
+function itemRow(it,ctx){const grp=GROUPS[it.g]||GROUPS.watch; const inDeck=(()=>{let ids;try{ids=JSON.parse(store.get('pf-today')||'[]')}catch(e){ids=[]}return ids.includes(it.yt);})();
+  const row=document.createElement('div'); row.className='pf-item';
+  const pageTag=it.page?`<span class="t" style="background:var(--ink-soft)">${it.page}</span>`:'';
+  row.innerHTML=`<img src="${thumbURL(it.yt)}" alt="" /><div class="meta"><h4>${it.t}</h4>
+    <div class="tags"><span class="t" style="background:${grp.color}">${grp.label}</span>${pageTag}<span class="t" style="background:transparent;color:var(--ink-soft);padding-left:0;">${it.src==='seed'?'built-in':'added'}</span></div></div>`;
+  const acts=document.createElement('div'); acts.style.display='flex'; acts.style.gap='2px';
+  if(ctx==='lib'){
+    const star=document.createElement('button'); star.className='act'; star.textContent=inDeck?'⭐':'☆'; star.title="In today's deck";
+    star.onclick=()=>{let ids;try{ids=JSON.parse(store.get('pf-today')||'[]')}catch(e){ids=[]}
+      if(ids.includes(it.yt))ids=ids.filter(x=>x!==it.yt); else ids.push(it.yt);
+      store.set('pf-today',JSON.stringify(ids)); refreshAll();};
+    const arch=document.createElement('button'); arch.className='act'; arch.textContent='🗄️'; arch.title='Move to Previous';
+    arch.onclick=()=>{setArchived(it,true);};
+    acts.appendChild(star); acts.appendChild(arch);
+    if(it.src!=='seed'){const del=document.createElement('button'); del.className='act'; del.textContent='🗑️'; del.title='Remove';
+      del.onclick=()=>{saveLive(loadLive().filter(x=>x.yt!==it.yt)); refreshAll();}; acts.appendChild(del);}
+  } else {
+    const back=document.createElement('button'); back.className='act'; back.textContent='♻️'; back.title='Bring back';
+    back.onclick=()=>{setArchived(it,false);}; acts.appendChild(back);
+  }
+  row.appendChild(acts); return row;}
+function setArchived(it,val){const live=loadLive(); const i=live.findIndex(x=>x.yt===it.yt);
+  if(i>-1){live[i].archived=val;} else {live.push({...it,archived:val,src:it.src||'seed'});} // seed items get a live override row
+  saveLive(live); refreshAll();}
+function renderManager(){const box=sheet.querySelector('#pfManager'); if(!box)return; box.innerHTML='';
+  const items=childLibrary(); if(!items.length){box.innerHTML='<p class="pf-note">Nothing yet — add some videos.</p>';}
+  items.forEach(it=>box.appendChild(itemRow(it,'lib')));
+  const al=sheet.querySelector('#pfArchList'); al.innerHTML=''; const arch=archivedItems();
+  if(!arch.length){al.innerHTML='<p class="pf-note">Nothing retired yet.</p>';} arch.forEach(it=>al.appendChild(itemRow(it,'arch')));
+}
+sheet.querySelector('#pfRebuild').onclick=()=>{store.set('pf-today',JSON.stringify(pickToday(childLibrary()))); refreshAll();};
+
+/* backup */
+sheet.querySelector('#pfExport').onclick=()=>{const t=sheet.querySelector('#pfBackText'); t.value=JSON.stringify(loadLive(),null,2);
+  sheet.querySelector('#pfBackOk').textContent='Exported below — copy it somewhere safe.';};
+sheet.querySelector('#pfSeed').onclick=()=>{const t=sheet.querySelector('#pfBackText');
+  const rows=childLibrary().filter(it=>it.src!=='seed').map(it=>`  {t:${JSON.stringify(it.t)}, g:"${it.g}", yt:"${it.yt}", src:"seed"${it.page?`, page:"${it.page}"`:''}},`);
+  t.value=rows.length?rows.join('\n'):'// nothing device-added to promote yet';
+  sheet.querySelector('#pfBackOk').textContent='Paste these lines into the SEED array in index.html, then push.';};
+sheet.querySelector('#pfImportBtn').onclick=()=>{const t=sheet.querySelector('#pfBackText'); const ok=sheet.querySelector('#pfBackOk');
+  try{const data=JSON.parse(t.value); if(!Array.isArray(data))throw 0;
+    const clean=data.filter(x=>x&&/^[A-Za-z0-9_-]{11}$/.test(x.yt)&&GROUPS[x.g]);
+    saveLive(clean); ok.textContent=`Imported ${clean.length} videos.`; refreshAll();
+  }catch(e){ok.textContent="That doesn't look like a valid backup.";}};
+
+/* piano-tunes chooser */
+function renderTuneList(){const box=sheet.querySelector('#pfTuneList'); if(!box)return; box.innerHTML='';
+  const active=activeTunes();
+  TUNES.forEach(t=>{const on=active.includes(t.name);
+    const row=document.createElement('div'); row.className='pf-item';
+    row.innerHTML=`<div class="meta"><h4>${t.name}</h4></div>`;
+    const btn=document.createElement('button'); btn.className='act'; btn.style.fontSize='20px'; btn.textContent=on?'☑️':'⬜️';
+    btn.onclick=()=>{setTuneActive(t.name,!on); renderTuneList();};
+    row.appendChild(btn); box.appendChild(row);});
+}
+
+/* tab switching */
+sheet.querySelectorAll('.pf-tab').forEach(t=>t.onclick=()=>{
+  sheet.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
+  const map={guide:'pfGuide',add:'pfAdd',lib:'pfLib',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
+  sheet.querySelectorAll('.pf-view').forEach(v=>v.classList.remove('on'));
+  sheet.querySelector('#'+map[t.dataset.v]).classList.add('on');
+  if(t.dataset.v==='lib'||t.dataset.v==='arch') renderManager();
+  if(t.dataset.v==='tunes') renderTuneList();
+});
+sheet.querySelector('#pfClose').onclick=()=>sheet.classList.remove('show');
+
+/* ---- the maths gate ---- */
+const gate=document.createElement('div'); gate.className='pf-modal'; gate.id='pfGate';
+gate.innerHTML=`<div class="pf-card"><h2>Grown-up check</h2><p>Just so this is a grown-up.</p>
+  <div class="pf-sum" id="pfSum"></div>
+  <input class="pf-in" id="pfAns" type="number" inputmode="numeric" placeholder="answer" />
+  <div class="pf-err" id="pfGateErr"></div>
+  <div style="display:flex;gap:10px;margin-top:6px;"><button class="btn ghost" id="pfGateCancel" style="flex:1;">Cancel</button><button class="btn" id="pfGateGo" style="flex:1;">Enter</button></div>
+</div>`;
+document.body.appendChild(gate);
+let gA=0,gB=0,gTries=0;
+function newSum(){gA=3+Math.floor(Math.random()*7); gB=4+Math.floor(Math.random()*9); // products 12–~100
+  document.getElementById('pfSum').textContent=`${gA} × ${gB} = ?`;
+  document.getElementById('pfAns').value=''; document.getElementById('pfGateErr').textContent=''; gTries=0;}
+function openGate(){newSum(); gate.classList.add('show'); setTimeout(()=>document.getElementById('pfAns').focus(),50);}
+function tryGate(){const v=parseInt(document.getElementById('pfAns').value,10);
+  if(v===gA*gB){gate.classList.remove('show'); sheet.classList.add('show'); refreshAll();}
+  else{gTries++; document.getElementById('pfGateErr').textContent=gTries>=3?'Not quite — try a new sum.':'Not quite, try again.'; if(gTries>=3)newSum(); document.getElementById('pfAns').value='';}}
+document.getElementById('pfGateGo').onclick=tryGate;
+document.getElementById('pfAns').addEventListener('keydown',e=>{if(e.key==='Enter')tryGate();});
+document.getElementById('pfGateCancel').onclick=()=>gate.classList.remove('show');
+document.getElementById('parentBtn').onclick=openGate;
+
+refreshAll();
+</script>
+<script>
+/* register the service worker (harmless no-op where unsupported) */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

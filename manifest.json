@@ -3,16 +3,14 @@
   "short_name": "Pixfix",
   "description": "A calm, finite media surface for kids — the opposite of a feed.",
   "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FCF3EA",
   "theme_color": "#FCF3EA",
   "icons": [
-    {
-      "src": "https://imagedelivery.net/GhryEtlvYEhygxHE3JS6Bg/0652b44b-8104-4044-da17-7e7147fc9b00/public",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
