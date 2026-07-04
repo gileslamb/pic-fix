@@ -352,10 +352,11 @@ function allItems(){                       // seed + live, deduped by id (live w
 }
 function childLibrary(){return allItems().filter(it=>!it.archived)}
 function archivedItems(){return allItems().filter(it=>it.archived)}
-function pickToday(lib){                    // one per food group, in order, then top up to 5
+function pickToday(lib){                    // one per food group (newest first), then top up to 5
   const out=[],seen=new Set();
-  Object.keys(GROUPS).forEach(g=>{const it=lib.find(x=>x.g===g&&!seen.has(x.yt)); if(it){out.push(it.yt);seen.add(it.yt);}});
-  for(const it of lib){ if(out.length>=5)break; if(!seen.has(it.yt)){out.push(it.yt);seen.add(it.yt);} }
+  const byRecent=[...lib].sort((a,b)=>(b.added||0)-(a.added||0));   // parent-added items carry a timestamp; seeds sort oldest
+  Object.keys(GROUPS).forEach(g=>{const it=byRecent.find(x=>x.g===g&&!seen.has(x.yt)); if(it){out.push(it.yt);seen.add(it.yt);}});
+  for(const it of byRecent){ if(out.length>=5)break; if(!seen.has(it.yt)){out.push(it.yt);seen.add(it.yt);} }
   return out;
 }
 let LIBRARY=childLibrary();
@@ -846,6 +847,7 @@ sheet.querySelectorAll('.pf-parse').forEach(b=>b.onclick=()=>{const pi=+b.datase
       const item={t:(inp.value||promptFor(pi)).trim(),g:p.g,yt:id,src:'parent',added:Date.now()}; if(p.page)item.page=p.page;
       live.push(item); added++;});
     saveLive(live); ta.value=''; stage.innerHTML='';
+    if(added) store.set('pf-today',JSON.stringify(pickToday(childLibrary())));   // rebuild today's deck so new videos reach the home screen
     const ok=sheet.querySelector('#pfAddOk'); ok.textContent=`Added ${added} video${added===1?'':'s'} — Gabriela can see ${added===1?'it':'them'} now.`; setTimeout(()=>ok.textContent='',3500);
     refreshAll();};
   stage.appendChild(commit);
