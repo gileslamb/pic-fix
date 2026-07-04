@@ -144,7 +144,7 @@
   .pctls{display:flex; gap:9px; margin-bottom:12px; flex-wrap:wrap;}
   .pbtn{font-family:var(--disp); font-weight:700; font-size:13px; padding:9px 15px; border-radius:14px; cursor:pointer; background:var(--accent); color:#fff; border:none;}
   .pbtn.ghost{background:var(--glass); color:var(--ink); border:1.5px solid var(--glass-brd);}
-  .piano{position:relative; height:158px; display:flex; user-select:none; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px var(--shadow); background:#2b2b2b;}
+  .piano{position:relative; height:158px; display:flex; user-select:none; -webkit-user-select:none; touch-action:none; -webkit-tap-highlight-color:transparent; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px var(--shadow); background:#2b2b2b;}
   .wkey{flex:1; background:#fff; border-right:1px solid #d8cfc7; position:relative; cursor:pointer; display:flex; align-items:flex-end; justify-content:center; padding-bottom:9px; transition:background .05s;}
   .wkey:last-child{border-right:none;}
   .wkey .lbl{font-family:var(--disp); font-weight:700; font-size:13px; color:#b8ada3;}
@@ -487,9 +487,9 @@ const pianoEl=document.getElementById('piano');
 const wLabels={C4:"C",D4:"D",E4:"E",F4:"F",G4:"G",A4:"A",B4:"B",C5:"C"};
 const nW=WHITES.length;
 WHITES.forEach(n=>{const k=document.createElement('div'); k.className='wkey'; k.style.setProperty('--kc',n.c); k.dataset.id=n.id;
-  k.innerHTML=`<span class="strip"></span><span class="lbl">${wLabels[n.id]||''}</span>`; k.onpointerdown=()=>hitKey(n.id); pianoEl.appendChild(k);});
+  k.innerHTML=`<span class="strip"></span><span class="lbl">${wLabels[n.id]||''}</span>`; k.onpointerdown=(e)=>{e.preventDefault(); hitKey(n.id);}; pianoEl.appendChild(k);});
 BLACKS.forEach(n=>{const k=document.createElement('div'); k.className='bkey'; k.style.setProperty('--kc',n.c); k.dataset.id=n.id;
-  k.style.left=((n.after+1)*(100/nW)-4.3)+'%'; k.innerHTML=`<span class="dot"></span>`; k.onpointerdown=(e)=>{e.stopPropagation(); hitKey(n.id);}; pianoEl.appendChild(k);});
+  k.style.left=((n.after+1)*(100/nW)-4.3)+'%'; k.innerHTML=`<span class="dot"></span>`; k.onpointerdown=(e)=>{e.preventDefault(); e.stopPropagation(); hitKey(n.id);}; pianoEl.appendChild(k);});
 function keyEl(id){return pianoEl.querySelector(`[data-id="${CSS.escape(id)}"]`);}
 let pactx=null;
 function tone(freq){if(!pactx)pactx=new(window.AudioContext||window.webkitAudioContext)();
