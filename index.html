@@ -141,6 +141,27 @@
   .brush.sel{border-color:var(--ink);}
   .brush i{display:block; border-radius:50%; background:var(--ink);}
 
+  /* DRAW mode toggle + free-draw studio */
+  .drawmodes{display:flex; gap:8px; margin-bottom:12px;}
+  .dmode{flex:1; font-family:var(--disp); font-weight:700; font-size:14px; padding:10px 12px; border-radius:16px; cursor:pointer; background:var(--glass); color:var(--ink); border:1.5px solid var(--glass-brd);}
+  .dmode.on{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .studioboard{position:relative; width:100%; height:clamp(320px,52vh,560px); border-radius:18px; overflow:hidden; background:#FFFDF9; touch-action:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);}
+  .studioboard canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  #bgCanvas{z-index:1;}
+  #drawCanvas{z-index:2; touch-action:none; cursor:crosshair;}
+  .stbar{display:flex; flex-direction:column; gap:10px; margin-top:12px;}
+  .strow{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .stbtn{width:40px; height:40px; border-radius:13px; display:grid; place-items:center; cursor:pointer; background:var(--paper); border:1.5px solid var(--glass-brd); font-size:17px; color:var(--ink); line-height:1;}
+  .stbtn.on{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .stbtn.wide{width:auto; padding:0 13px; font-family:var(--disp); font-weight:700; font-size:13px;}
+  .stbtn:disabled{opacity:.38; cursor:default;}
+  .stsep{flex:1;}
+  .stlab{font-family:var(--disp); font-weight:700; font-size:12px; color:var(--ink-soft);}
+  .strow input[type=range]{flex:1; accent-color:var(--accent); min-width:88px;}
+  .stcolor{width:40px; height:40px; border-radius:13px; border:1.5px solid var(--glass-brd); padding:2px; overflow:hidden; cursor:pointer; background:var(--paper);}
+  .stswatch{width:30px; height:30px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 0 2px rgba(0,0,0,.14); cursor:pointer; flex:none;}
+  .stswatch.sel{box-shadow:0 0 0 3px var(--ink);}
+
   /* PIANO */
   .pianowrap{margin-bottom:14px;}
   .pctls{display:flex; gap:9px; margin-bottom:12px; flex-wrap:wrap;}
@@ -241,8 +262,12 @@
 
     <section class="panel" id="draw">
       <div class="eyebrow">Make</div><h1 class="h1">Draw &amp; colour in</h1>
-      <p class="sub">Pick a picture to colour, or start blank. Choose a colour and a brush.</p>
-      <div class="drawwrap">
+      <p class="sub">Colour a picture in, or go free-draw with brushes, a smudge tool and photo tracing.</p>
+      <div class="drawmodes">
+        <button class="dmode on" data-dmode="colour">🖍️ Colour in</button>
+        <button class="dmode" data-dmode="free">🎨 Free draw</button>
+      </div>
+      <div class="drawwrap" id="colourWrap">
         <div class="tmpls" id="tmpls"></div>
         <div class="board" id="board"><div class="tmpl" id="tmpl"></div><canvas id="pad"></canvas></div>
         <div class="tools" id="tools">
@@ -258,6 +283,48 @@
           <span class="brush" data-w="12"><i style="width:12px;height:12px;"></i></span>
           <span class="brush" data-w="22"><i style="width:20px;height:20px;"></i></span>
           <button class="btn ghost" style="margin-left:auto; padding:8px 15px; font-size:13px;" onclick="clearPad()">Clear</button>
+        </div>
+      </div>
+
+      <div class="drawwrap" id="studioWrap" hidden>
+        <div class="studioboard" id="studioBoard">
+          <canvas id="bgCanvas"></canvas>
+          <canvas id="drawCanvas"></canvas>
+        </div>
+        <div class="stbar">
+          <div class="strow">
+            <button class="stbtn on" data-tool="pen" title="Pen">✏️</button>
+            <button class="stbtn" data-tool="eraser" title="Eraser">🧽</button>
+            <button class="stbtn" data-tool="smudge" title="Smudge / blend">👆</button>
+            <button class="stbtn" data-tool="dropper" title="Pick a colour from the picture">🩸</button>
+            <span class="stsep"></span>
+            <button class="stbtn" id="stUndo" title="Undo">↶</button>
+            <button class="stbtn" id="stRedo" title="Redo">↷</button>
+            <button class="btn ghost" id="stClear" style="padding:8px 14px; font-size:13px;">Clear</button>
+          </div>
+          <div class="strow" id="stSwatches">
+            <span class="stswatch sel" style="background:#FF5A5F" data-c="#FF5A5F"></span>
+            <span class="stswatch" style="background:#FF8A3D" data-c="#FF8A3D"></span>
+            <span class="stswatch" style="background:#FFB01F" data-c="#FFB01F"></span>
+            <span class="stswatch" style="background:#2FBE7E" data-c="#2FBE7E"></span>
+            <span class="stswatch" style="background:#3E8EF7" data-c="#3E8EF7"></span>
+            <span class="stswatch" style="background:#9B6DFF" data-c="#9B6DFF"></span>
+            <span class="stswatch" style="background:#FF6FB5" data-c="#FF6FB5"></span>
+            <span class="stswatch" style="background:#2C2622" data-c="#2C2622"></span>
+            <span class="stswatch" style="background:#FFFFFF" data-c="#FFFFFF"></span>
+            <input type="color" class="stcolor" id="stColor" value="#FF5A5F" title="Any colour" />
+          </div>
+          <div class="strow">
+            <span class="stlab">Size</span><input type="range" id="stSize" min="1" max="48" value="8" />
+            <span class="stlab">Opacity</span><input type="range" id="stOpacity" min="10" max="100" value="100" />
+          </div>
+          <div class="strow">
+            <button class="btn ghost" id="stImport" style="padding:8px 14px; font-size:13px;">🖼️ Trace photo</button>
+            <button class="stbtn wide" id="stTrace" title="Turn the photo into an outline to trace" disabled>◔ Outline</button>
+            <button class="btn ghost" id="stRemoveBg" style="padding:8px 14px; font-size:13px;" disabled>Remove</button>
+            <span class="stlab">Fade</span><input type="range" id="stBgOp" min="0" max="100" value="45" />
+            <input type="file" id="stFile" accept="image/*" hidden />
+          </div>
         </div>
       </div>
     </section>
@@ -425,7 +492,7 @@ document.getElementById('nav').addEventListener('click',e=>{
   if(document.body.classList.contains('customise')){ pickIconFor(b.dataset.tab); return; }
   document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
   panels.forEach(p=>p.classList.remove('active')); document.getElementById(b.dataset.tab).classList.add('active');
-  if(b.dataset.tab==='draw') fitCanvas();
+  if(b.dataset.tab==='draw') refitDraw();
 });
 document.getElementById('paintBtn').onclick=()=>document.body.classList.toggle('customise');
 let pendingTab=null; const iconPicker=document.getElementById('iconPicker');
@@ -541,6 +608,191 @@ document.getElementById('tools').addEventListener('click',e=>{
 });
 function clearPad(){ctx.clearRect(0,0,cv.width,cv.height);}
 
+/* ---- DRAW mode switch: colour-in (templates) vs free-draw studio ---- */
+let drawMode='colour';
+const colourWrap=document.getElementById('colourWrap'), studioWrap=document.getElementById('studioWrap');
+function refitDraw(){ if(drawMode==='colour') fitCanvas(); else if(window.pfStudioFit) window.pfStudioFit(); }
+function setDrawMode(m){
+  drawMode=m;
+  document.querySelectorAll('.dmode').forEach(b=>b.classList.toggle('on',b.dataset.dmode===m));
+  colourWrap.hidden=(m!=='colour'); studioWrap.hidden=(m!=='free');
+  refitDraw();
+}
+document.querySelector('.drawmodes').addEventListener('click',e=>{const b=e.target.closest('.dmode'); if(b) setDrawMode(b.dataset.dmode);});
+
+/* ---- FREE-DRAW STUDIO ------------------------------------------------------
+   Two stacked canvases: #bgCanvas (imported trace photo / Sobel outline) sits
+   UNDER #drawCanvas (the artwork), so the trace can be faded or removed without
+   touching the drawing. History is a light command list (pen/eraser/smudge),
+   replayed on undo/redo; once it passes CAP the oldest command is baked into a
+   base raster so memory stays flat on a tablet. Points are stored in CSS units
+   and scaled by devicePixelRatio at draw time, so strokes stay crisp.        */
+(function(){
+  const board=document.getElementById('studioBoard');
+  const bg=document.getElementById('bgCanvas'),  bgx=bg.getContext('2d');
+  const dc=document.getElementById('drawCanvas'), dx=dc.getContext('2d');
+  const base=document.createElement('canvas'),    bx=base.getContext('2d'); // baked older strokes
+  const CAP=40;
+  const S={ tool:'pen', color:'#FF5A5F', size:8, opacity:1,
+            strokes:[], redo:[], cur:null, drawing:false, ptrId:null,
+            brush:null, srcImg:null, traceOn:false };
+  let dpr=1, W=0, H=0, cw=0, ch=0;
+
+  /* --- sizing (DPR-aware; picture preserved across resize by rasterising) --- */
+  function fit(){
+    const r=board.getBoundingClientRect();
+    const nw2=Math.round(r.width), nh2=Math.round(r.height);
+    if(!nw2||!nh2) return;
+    const ndpr=Math.max(1,Math.min(3,window.devicePixelRatio||1));
+    const nw=nw2*ndpr, nh=nh2*ndpr;
+    if(nw===W&&nh===H&&ndpr===dpr) return;
+    let snap=null;
+    if(W){ snap=document.createElement('canvas'); snap.width=W; snap.height=H;
+           const sc=snap.getContext('2d'); sc.drawImage(base,0,0); sc.drawImage(dc,0,0); }
+    dpr=ndpr; W=nw; H=nh; cw=nw2; ch=nh2;
+    [dc,bg,base].forEach(c=>{c.width=nw; c.height=nh;});
+    [dx,bx].forEach(c=>{c.setTransform(dpr,0,0,dpr,0,0); c.lineCap='round'; c.lineJoin='round';});
+    if(snap){ bx.save(); bx.setTransform(1,0,0,1,0,0); bx.drawImage(snap,0,0,snap.width,snap.height,0,0,nw,nh); bx.restore(); }
+    S.strokes.length=0; S.redo.length=0;   // undo history doesn't survive a resize; picture does
+    render(); drawBg(); syncUndo();
+  }
+  window.pfStudioFit=fit;
+
+  function pos(e){ const r=dc.getBoundingClientRect();
+    return { x:Math.max(0,Math.min(cw,(e.clientX-r.left)*cw/r.width)),
+             y:Math.max(0,Math.min(ch,(e.clientY-r.top )*ch/r.height)) }; }
+  function penW(e){ return (e.pointerType==='pen'&&e.pressure>0) ? S.size*(0.35+0.65*e.pressure) : S.size; }
+
+  /* --- rendering a stroke/smudge command onto a context (CSS-unit coords) --- */
+  function applyCmd(ctx,cmd){
+    if(cmd.t==='smudge'){ Smudge.run(ctx,cmd); return; }
+    ctx.save();
+    ctx.globalCompositeOperation = cmd.t==='eraser' ? 'destination-out' : 'source-over';
+    ctx.globalAlpha = cmd.t==='eraser' ? 1 : cmd.o;
+    ctx.strokeStyle=cmd.c; ctx.fillStyle=cmd.c; ctx.lineCap='round'; ctx.lineJoin='round';
+    const p=cmd.pts;
+    if(p.length===1){ ctx.beginPath(); ctx.arc(p[0].x,p[0].y,(p[0].w||cmd.s)/2,0,7); ctx.fill(); }
+    else for(let i=1;i<p.length;i++){ ctx.lineWidth=(p[i].w||cmd.s); ctx.beginPath(); ctx.moveTo(p[i-1].x,p[i-1].y); ctx.lineTo(p[i].x,p[i].y); ctx.stroke(); }
+    ctx.restore();
+  }
+  function render(){
+    dx.save(); dx.setTransform(1,0,0,1,0,0); dx.clearRect(0,0,W,H); dx.drawImage(base,0,0); dx.restore();
+    for(const c of S.strokes) applyCmd(dx,c);
+  }
+
+  /* --- smudge: modular sample-and-drag blender (swap-in-able later) --- */
+  const Smudge={
+    make(sizeCss){ const d=Math.max(6,Math.round(sizeCss*dpr*1.2)); const c=document.createElement('canvas'); c.width=d; c.height=d; return {c,x:c.getContext('2d'),d}; },
+    grab(b,ctx,cx,cy){ const x=b.x,d=b.d; x.globalCompositeOperation='source-over'; x.clearRect(0,0,d,d);
+      x.drawImage(ctx.canvas, cx-d/2, cy-d/2, d, d, 0, 0, d, d);
+      x.globalCompositeOperation='destination-in'; x.beginPath(); x.arc(d/2,d/2,d/2,0,7); x.fillStyle='#000'; x.fill();
+      x.globalCompositeOperation='source-over'; },
+    stamp(b,ctx,cx,cy,k){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=k; ctx.drawImage(b.c, cx-b.d/2, cy-b.d/2); ctx.restore(); },
+    run(ctx,cmd){ const b=this.make(cmd.s); const p=cmd.pts; this.grab(b,ctx,p[0].x*dpr,p[0].y*dpr);
+      for(let i=1;i<p.length;i++){ this.stamp(b,ctx,p[i].x*dpr,p[i].y*dpr,cmd.k); this.grab(b,ctx,p[i].x*dpr,p[i].y*dpr); } }
+  };
+
+  /* --- live drawing --- */
+  function segDraw(a,b){ dx.save();
+    dx.globalCompositeOperation=S.tool==='eraser'?'destination-out':'source-over';
+    dx.globalAlpha=S.tool==='eraser'?1:S.opacity; dx.strokeStyle=S.color;
+    dx.lineCap='round'; dx.lineJoin='round'; dx.lineWidth=b.w||S.size;
+    dx.beginPath(); dx.moveTo(a.x,a.y); dx.lineTo(b.x,b.y); dx.stroke(); dx.restore(); }
+  function dot(p,w){ dx.save();
+    dx.globalCompositeOperation=S.tool==='eraser'?'destination-out':'source-over';
+    dx.globalAlpha=S.tool==='eraser'?1:S.opacity; dx.fillStyle=S.color;
+    dx.beginPath(); dx.arc(p.x,p.y,(w||S.size)/2,0,7); dx.fill(); dx.restore(); }
+
+  function down(e){
+    if(S.tool==='dropper'){ pick(pos(e)); e.preventDefault(); return; }
+    S.drawing=true; S.ptrId=e.pointerId; try{dc.setPointerCapture(e.pointerId);}catch(_){}
+    const p=pos(e);
+    if(S.tool==='smudge'){ S.cur={t:'smudge', s:S.size, k:0.55, pts:[{x:p.x,y:p.y}]};
+      S.brush=Smudge.make(S.size); Smudge.grab(S.brush,dx,p.x*dpr,p.y*dpr); }
+    else { const w=penW(e); S.cur={t:S.tool==='eraser'?'eraser':'pen', c:S.color, s:S.size, o:S.opacity, pts:[{x:p.x,y:p.y,w:w}]}; dot(p,w); }
+    e.preventDefault();
+  }
+  function move(e){
+    if(!S.drawing||e.pointerId!==S.ptrId) return;
+    const co=e.getCoalescedEvents?e.getCoalescedEvents():null; const evs=(co&&co.length)?co:[e];
+    for(const ev of evs){ const p=pos(ev); const last=S.cur.pts[S.cur.pts.length-1];
+      if(p.x===last.x&&p.y===last.y) continue;
+      if(S.tool==='smudge'){ S.cur.pts.push({x:p.x,y:p.y}); Smudge.stamp(S.brush,dx,p.x*dpr,p.y*dpr,S.cur.k); Smudge.grab(S.brush,dx,p.x*dpr,p.y*dpr); }
+      else { const w=penW(ev); const np={x:p.x,y:p.y,w:w}; S.cur.pts.push(np); segDraw(last,np); }
+    }
+    e.preventDefault();
+  }
+  function up(e){
+    if(!S.drawing) return; S.drawing=false; try{dc.releasePointerCapture(S.ptrId);}catch(_){}
+    if(S.cur){ S.strokes.push(S.cur); S.redo.length=0; S.cur=null; S.brush=null;
+      if(S.strokes.length>CAP) applyCmd(bx,S.strokes.shift()); syncUndo(); }
+  }
+  dc.addEventListener('pointerdown',down);
+  dc.addEventListener('pointermove',move);
+  dc.addEventListener('pointerup',up);
+  dc.addEventListener('pointercancel',up);
+
+  /* --- undo / redo / clear --- */
+  function undo(){ if(!S.strokes.length) return; S.redo.push(S.strokes.pop()); render(); syncUndo(); }
+  function redo(){ if(!S.redo.length) return; S.strokes.push(S.redo.pop()); if(S.strokes.length>CAP) applyCmd(bx,S.strokes.shift()); render(); syncUndo(); }
+  function clearArt(){ S.strokes.length=0; S.redo.length=0; bx.save(); bx.setTransform(1,0,0,1,0,0); bx.clearRect(0,0,W,H); bx.restore(); render(); syncUndo(); }
+  function syncUndo(){ document.getElementById('stUndo').disabled=!S.strokes.length; document.getElementById('stRedo').disabled=!S.redo.length; }
+  document.getElementById('stUndo').onclick=undo;
+  document.getElementById('stRedo').onclick=redo;
+  document.getElementById('stClear').onclick=clearArt;
+
+  /* --- eyedropper: sample the artwork, else the trace photo --- */
+  function pick(p){ const x=Math.round(p.x*dpr), y=Math.round(p.y*dpr);
+    let d; try{ d=dx.getImageData(x,y,1,1).data; }catch(_){ return; }
+    if(d[3]<8){ try{ d=bgx.getImageData(x,y,1,1).data; }catch(_){ d=null; } }
+    if(!d||d[3]<8){ setColor('#FFFDF9'); } else { setColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('')); }
+    setTool('pen');
+  }
+
+  /* --- tools + colour UI --- */
+  function setTool(t){ S.tool=t; document.querySelectorAll('#studioWrap .stbtn[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); }
+  function setColor(hex){ S.color=hex; document.getElementById('stColor').value=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#FF5A5F';
+    document.querySelectorAll('#stSwatches .stswatch').forEach(s=>s.classList.toggle('sel',(s.dataset.c||'').toLowerCase()===hex.toLowerCase())); }
+  document.querySelectorAll('#studioWrap .stbtn[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
+  document.getElementById('stSwatches').addEventListener('click',e=>{ const s=e.target.closest('.stswatch'); if(!s) return; setColor(s.dataset.c); setTool('pen'); });
+  document.getElementById('stColor').oninput=e=>{ setColor(e.target.value); setTool('pen'); };
+  document.getElementById('stSize').oninput=e=>{ S.size=+e.target.value; };
+  document.getElementById('stOpacity').oninput=e=>{ S.opacity=+e.target.value/100; };
+
+  /* --- trace photo (background layer) + Sobel outline --- */
+  function contain(iw,ih){ const s=Math.min(W/iw,H/ih); const w=iw*s,h=ih*s; return {x:(W-w)/2,y:(H-h)/2,w,h}; }
+  function sobel(img,w,h){ w=Math.max(1,Math.round(w)); h=Math.max(1,Math.round(h));
+    const t=document.createElement('canvas'); t.width=w; t.height=h; const tc=t.getContext('2d');
+    tc.drawImage(img,0,0,w,h); const src=tc.getImageData(0,0,w,h).data;
+    const g=new Float32Array(w*h);
+    for(let i=0;i<w*h;i++) g[i]=0.299*src[i*4]+0.587*src[i*4+1]+0.114*src[i*4+2];
+    const out=tc.createImageData(w,h), o=out.data;
+    const kx=[-1,0,1,-2,0,2,-1,0,1], ky=[-1,-2,-1,0,0,0,1,2,1];
+    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){
+      let sx=0,sy=0,k=0;
+      for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){ const v=g[(y+j)*w+(x+i)]; sx+=v*kx[k]; sy+=v*ky[k]; k++; }
+      const m=Math.sqrt(sx*sx+sy*sy), idx=(y*w+x)*4;
+      const a = m>150?255 : m>60?(m-60)*2.8 : 0;
+      o[idx]=32; o[idx+1]=28; o[idx+2]=24; o[idx+3]=a;
+    }
+    tc.putImageData(out,0,0); return t;
+  }
+  function drawBg(){ bgx.save(); bgx.setTransform(1,0,0,1,0,0); bgx.clearRect(0,0,W,H);
+    if(S.srcImg){ const f=contain(S.srcImg.naturalWidth||S.srcImg.width, S.srcImg.naturalHeight||S.srcImg.height);
+      if(S.traceOn){ const e=sobel(S.srcImg,f.w,f.h); bgx.drawImage(e,f.x,f.y); } else bgx.drawImage(S.srcImg,f.x,f.y,f.w,f.h); }
+    bgx.restore();
+  }
+  function traceBtns(){ const on=!!S.srcImg; document.getElementById('stTrace').disabled=!on; document.getElementById('stRemoveBg').disabled=!on;
+    document.getElementById('stTrace').classList.toggle('on',S.traceOn); }
+  document.getElementById('stImport').onclick=()=>document.getElementById('stFile').click();
+  document.getElementById('stFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const rd=new FileReader(); rd.onload=()=>{ const im=new Image(); im.onload=()=>{ S.srcImg=im; S.traceOn=false; drawBg(); traceBtns(); }; im.src=rd.result; }; rd.readAsDataURL(f); e.target.value=''; };
+  document.getElementById('stTrace').onclick=()=>{ if(!S.srcImg) return; S.traceOn=!S.traceOn; drawBg(); traceBtns(); };
+  document.getElementById('stRemoveBg').onclick=()=>{ S.srcImg=null; S.traceOn=false; drawBg(); traceBtns(); };
+  const bgOp=document.getElementById('stBgOp'); bg.style.opacity=(+bgOp.value/100); bgOp.oninput=e=>{ bg.style.opacity=(+e.target.value/100); };
+  syncUndo();
+})();
+
 /* PIANO — colour-coded, polyphonic, with Twinkle teach + autoplay */
 const NOTES=[
   {id:"C4",f:261.63,c:"#FF5A5F"},{id:"C#4",f:277.18,c:"#C0616B",b:1,after:0},
@@ -640,7 +892,7 @@ function renderSearch(q){q=q.trim().toLowerCase(); sr.innerHTML='';
     r.innerHTML=`<div class="dot" style="background:${it.yt?'#0B0A0C':grp.color}">${inner}</div><div><h4>${it.t}</h4><p style="color:${grp.color}">${grp.label}</p></div>`;
     r.onclick=()=>{ if(it.yt) openPlayer(it); }; sr.appendChild(r);});}
 si.addEventListener('input',e=>renderSearch(e.target.value)); renderSearch('');
-window.addEventListener('resize',()=>{ if(document.getElementById('draw').classList.contains('active')) fitCanvas(); });
+window.addEventListener('resize',()=>{ if(document.getElementById('draw').classList.contains('active')) refitDraw(); });
 
 /* ========================================================================
    GROWN-UPS LAYER  (Phase A — manual curation, no API keys, no backend)
