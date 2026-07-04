@@ -1,7 +1,7 @@
 /* Pixfix service worker — makes it a real installable app and lets the
    shell (piano, drawing, themes, today's deck) work with no connection.
    Videos and fresh thumbnails still need the network, as expected.        */
-const CACHE = 'pixfix-v3';
+const CACHE = 'pixfix-v4';
 const SHELL = [
   './',
   './index.html',
