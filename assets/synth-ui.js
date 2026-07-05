@@ -163,10 +163,12 @@
      synth keyboard it is driven by the existing pointer maths — display only. */
   function XYPad(host, opts){
     opts=opts||{};
-    host.classList.add('pui-xy');
-    const cv=document.createElement('canvas'); const grid=document.createElement('div'); grid.className='pui-xy-grid';
+    host.classList.add('pui-xy'); if(opts.bare) host.classList.add('pui-xy-bare');
+    const cv=document.createElement('canvas');
     const puck=document.createElement('div'); puck.className='pui-xy-puck';
-    host.appendChild(grid); host.appendChild(cv); host.appendChild(puck);
+    if(!opts.bare){ const grid=document.createElement('div'); grid.className='pui-xy-grid'; host.appendChild(grid); }
+    host.appendChild(cv); host.appendChild(puck);
+    const listenEl=opts.listenOn||host;      // where pointer events come from (e.g. the keyboard)
     host.setAttribute('role','application'); host.setAttribute('aria-label',opts.label||'XY expression pad');
     const cx=cv.getContext('2d'); let W=0,H=0,dpr=1; const trail=[]; let raf=0, down=false;
     function fit(){ const b=host.getBoundingClientRect(); dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
@@ -182,13 +184,15 @@
       trail.push({x,y,a:1}); if(trail.length>26) trail.shift(); if(!raf) loop(); }
     function clear(){ down=false; host.classList.remove('grab'); }
     if(opts.interactive){
-      const xy=e=>{ const b=host.getBoundingClientRect(); return [ (e.clientX-b.left)/b.width, (e.clientY-b.top)/b.height ]; };
-      host.style.touchAction='none';
-      host.addEventListener('pointerdown',e=>{ const[x,y]=xy(e); down=true; set(x,y,true); try{host.setPointerCapture(e.pointerId);}catch(_){}
-        if(opts.onChange)opts.onChange(x,1-y); e.preventDefault(); });
-      host.addEventListener('pointermove',e=>{ if(!down)return; const[x,y]=xy(e); set(x,y,true); if(opts.onChange)opts.onChange(x,1-y); e.preventDefault(); });
-      const up=()=>{ down=false; host.classList.remove('grab'); };
-      host.addEventListener('pointerup',up); host.addEventListener('pointercancel',up);
+      const xy=e=>{ const b=listenEl.getBoundingClientRect(); return [ clamp((e.clientX-b.left)/b.width,0,1), clamp((e.clientY-b.top)/b.height,0,1) ]; };
+      // In overlay mode the puck is display-only: don't preventDefault or capture,
+      // so the underlying control (the keyboard) keeps its own pointer handling.
+      const passive=!!opts.overlay;
+      listenEl.addEventListener('pointerdown',e=>{ const[x,y]=xy(e); down=true; set(x,y,true); if(!passive){ try{listenEl.setPointerCapture(e.pointerId);}catch(_){} }
+        if(opts.onChange)opts.onChange(x,1-y); if(!passive) e.preventDefault(); });
+      listenEl.addEventListener('pointermove',e=>{ if(!down)return; const[x,y]=xy(e); set(x,y,true); if(opts.onChange)opts.onChange(x,1-y); if(!passive) e.preventDefault(); });
+      const up=()=>{ down=false; host.classList.remove('grab'); if(passive) host.classList.remove('active'); };
+      listenEl.addEventListener('pointerup',up); listenEl.addEventListener('pointercancel',up);
     }
     fit(); window.addEventListener('resize',fit);
     return { el:host, set, clear, fit };

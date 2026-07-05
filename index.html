@@ -17,6 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/synth-ui.css" />
 <style>
   :root{
     --disp:"Shantell Sans", ui-rounded, system-ui, sans-serif;
@@ -208,6 +209,14 @@
   .synwk.on{background:linear-gradient(var(--accent),var(--accent)); filter:brightness(1.05);}
   .synbk{position:absolute; top:0; height:60%; background:linear-gradient(#332c26,#241f1a); border-radius:0 0 5px 5px; z-index:2;}
   .synbk.on{background:var(--accent);}
+  /* tactile control layout (Motion module deliberately unchanged) */
+  .synview[hidden]{ display:none; }   /* keep [hidden] winning over the flex rules below */
+  .vw-knobs{ display:flex; gap:34px; justify-content:center; align-items:flex-start; padding:10px 0 4px; flex-wrap:wrap; }
+  .vw-faders{ display:flex; gap:28px; justify-content:center; align-items:flex-end; padding:6px 0; flex-wrap:wrap; }
+  .vw-voice .synrow{ align-items:center; gap:8px; }
+  #synBirdsHost,#synOctHost{ display:inline-flex; }
+  .synbar .pui-knob{ width:56px; }
+  .synkeys-xy{ position:absolute; inset:0; z-index:3; pointer-events:none; }
 
   /* MADE library */
   .madegrid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
@@ -397,24 +406,23 @@
           <canvas class="synviz" id="synViz"></canvas>
 
           <div class="synpanel" id="synPanel" hidden>
-            <div class="synview" data-m="voice">
+            <div class="synview vw-voice" data-m="voice">
               <div class="synrow"><span class="stlab">Sound</span>
                 <button class="synchip on" data-voice="soft">◟ Soft</button>
                 <button class="synchip" data-voice="buzzy">◤ Buzzy</button>
                 <button class="synchip" data-voice="hollow">▢ Hollow</button>
               </div>
               <div class="synrow"><span class="stlab">Extras</span>
-                <button class="synchip" id="synBirds">🐦 Birds: off</button>
-                <button class="synchip" id="synOct">🐘 Big</button>
+                <span id="synBirdsHost"></span><span id="synOctHost"></span>
               </div>
             </div>
-            <div class="synview" data-m="shape" hidden>
-              <label class="synk"><span>Soft</span><input type="range" id="synAtk" min="0" max="100" value="12"><span>Sharp</span></label>
-              <label class="synk"><span>Short</span><input type="range" id="synRel" min="0" max="100" value="45"><span>Long</span></label>
+            <div class="synview vw-knobs" data-m="shape" hidden>
+              <input type="range" id="synAtk" min="0" max="100" value="12">
+              <input type="range" id="synRel" min="0" max="100" value="45">
             </div>
-            <div class="synview" data-m="filter" hidden>
-              <label class="synk"><span>Dark</span><input type="range" id="synCut" min="0" max="100" value="72"><span>Bright</span></label>
-              <label class="synk"><span>Calm</span><input type="range" id="synRes" min="0" max="100" value="18"><span>Squelch</span></label>
+            <div class="synview vw-knobs" data-m="filter" hidden>
+              <input type="range" id="synCut" min="0" max="100" value="72">
+              <input type="range" id="synRes" min="0" max="100" value="18">
             </div>
             <div class="synview" data-m="motion" hidden>
               <div class="synrow"><button class="synchip" id="synArp">✨ Motion: off</button></div>
@@ -425,10 +433,10 @@
               <div class="synrow"><span class="stlab">Range</span>
                 <button class="synchip on" data-arpoct="1">1</button><button class="synchip" data-arpoct="2">2</button><button class="synchip" data-arpoct="3">3</button></div>
             </div>
-            <div class="synview" data-m="space" hidden>
-              <label class="synk"><span>Echo</span><input type="range" id="synDlyMix" min="0" max="100" value="0"><span></span></label>
-              <label class="synk"><span>Repeats</span><input type="range" id="synDlyFb" min="0" max="88" value="35"><span></span></label>
-              <label class="synk"><span>Room</span><input type="range" id="synRev" min="0" max="100" value="0"><span></span></label>
+            <div class="synview vw-faders" data-m="space" hidden>
+              <input type="range" id="synDlyMix" min="0" max="100" value="0">
+              <input type="range" id="synDlyFb" min="0" max="88" value="35">
+              <input type="range" id="synRev" min="0" max="100" value="0">
             </div>
           </div>
 
@@ -509,6 +517,7 @@
 
 <input type="file" id="iconPicker" accept="image/*" hidden />
 
+<script src="assets/synth-ui.js"></script>
 <script>
 /* hero image: try local transparent PNG, then CDN painting, then text */
 (function(){var img=document.getElementById('heroImg');var step=0;
@@ -1247,7 +1256,8 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
   function showModule(m){ if(openMod===m){ panel.hidden=true; openMod=null; document.querySelectorAll('.synmod').forEach(b=>b.classList.remove('on')); return; }
     openMod=m; panel.hidden=false;
     panel.querySelectorAll('.synview').forEach(v=>v.hidden=(v.dataset.m!==m));
-    document.querySelectorAll('.synmod').forEach(b=>b.classList.toggle('on',b.dataset.m===m)); }
+    document.querySelectorAll('.synmod').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+    faderCtls.forEach(f=>f.paint&&f.paint()); }   // faders need a repaint once their panel is visible
   document.getElementById('synModTabs').addEventListener('click',e=>{const b=e.target.closest('.synmod'); if(b) showModule(b.dataset.m);});
 
   /* ---- controls wiring ---- */
@@ -1258,8 +1268,8 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
   seg('[data-arpspd]','arpspd',v=>state.arpspd=+v);
   seg('[data-arppat]','arppat',v=>{state.arppat=v; heldChanged();});
   seg('[data-arpoct]','arpoct',v=>state.arpoct=+v);
-  document.getElementById('synBirds').onclick=e=>{ state.birds=!state.birds; e.target.classList.toggle('on',state.birds); e.target.textContent='🐦 Birds: '+(state.birds?'on':'off'); };
-  document.getElementById('synOct').onclick=e=>{ state.oct = state.oct===0?-1:0; e.target.textContent = state.oct===0?'🐘 Big':'🐭 Small'; };
+  /* Birds + Octave are mounted as rocker switches in mountUIOnce() — they flip the
+     exact same state.birds / state.oct as before. */
   document.getElementById('synAtk').oninput=e=>state.atk=expo(+e.target.value/100,0.004,0.6);
   document.getElementById('synRel').oninput=e=>state.rel=expo(+e.target.value/100,0.08,2.4);
   document.getElementById('synCut').oninput=e=>{state.cutKnob=+e.target.value/100; applyFilter();};
@@ -1285,7 +1295,27 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
     btn.textContent=ok?'✓ Kept':'⭐ Keep'; btn.disabled=false; setSynNote(ok?'Kept in your Made library 🎵':'Could not keep it.'); };
 
   /* ---- show / hide / fit ---- */
-  function show(){ buildKeysOnce(); fitViz(); startClock(); vizOn=true; requestAnimationFrame(drawViz); }
+  /* --- tactile control skin (PixSynthUI). Widgets only: each Knob/Fader drives
+     its native <input> and dispatches the same 'input' event, so every audio
+     binding above runs unchanged with identical values. Motion is left alone. */
+  const faderCtls=[]; let uiMounted=false, xyMounted=false;
+  function mountUIOnce(){ if(uiMounted||!window.PixSynthUI) return; uiMounted=true; const U=window.PixSynthUI;
+    U.Knob(document.getElementById('synAtk'),{label:'Soft → Sharp',default:12});
+    U.Knob(document.getElementById('synRel'),{label:'Short → Long',default:45});
+    U.Knob(document.getElementById('synCut'),{label:'Brightness',glow:true,default:72});
+    U.Knob(document.getElementById('synRes'),{label:'Squelch',default:18});
+    faderCtls.push(U.Fader(document.getElementById('synDlyMix'),{label:'Echo',default:0}));
+    faderCtls.push(U.Fader(document.getElementById('synDlyFb'),{label:'Repeats',default:35}));
+    faderCtls.push(U.Fader(document.getElementById('synRev'),{label:'Room',default:0}));
+    U.Knob(document.getElementById('synBpm'),{format:v=>Math.round(v)+' bpm',default:100,size:56});
+    const bh=document.getElementById('synBirdsHost'); if(bh) bh.appendChild(U.Toggle({label:'Birds',labelOn:'on',labelOff:'off',on:state.birds,onChange:v=>{state.birds=v;}}).el);
+    const oh=document.getElementById('synOctHost'); if(oh) oh.appendChild(U.Toggle({label:'Octave',labelOn:'small',labelOff:'big',on:state.oct!==0,onChange:v=>{state.oct=v?-1:0;}}).el);
+  }
+  function mountXYOnce(){ if(xyMounted||!window.PixSynthUI) return; xyMounted=true;
+    const ov=document.createElement('div'); ov.className='synkeys-xy'; kb.appendChild(ov);
+    window.PixSynthUI.XYPad(ov,{bare:true,interactive:true,overlay:true,listenOn:kb,label:'pitch and timbre expression'});
+  }
+  function show(){ buildKeysOnce(); mountXYOnce(); mountUIOnce(); fitViz(); startClock(); vizOn=true; requestAnimationFrame(drawViz); }
   function hide(){ vizOn=false; stopClock(); panic(); }
   function panic(){ voices.forEach(v=>{ try{ v.o.stop(); if(v.bo)v.bo.stop(); }catch(_){} }); voices.clear(); ptr.clear();
     document.querySelectorAll('.synwk.on,.synbk.on').forEach(k=>k.classList.remove('on')); }

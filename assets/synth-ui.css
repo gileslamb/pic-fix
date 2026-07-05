@@ -80,6 +80,10 @@
   transition:transform .04s linear, opacity .18s; opacity:0; }
 .pui-xy.active .pui-xy-puck{ opacity:1; }
 .pui-xy.grab .pui-xy-puck{ transition:transform .02s linear; }
+/* bare overlay: sits transparently over another control (e.g. the keyboard),
+   never intercepts pointers — the control underneath keeps its own handling */
+.pui-xy-bare{ position:absolute; inset:0; background:none; pointer-events:none; }
+.pui-xy-bare canvas{ pointer-events:none; }
 
 @media (prefers-reduced-motion: reduce){
   .pui-svg,.pui-fader-cap,.pui-rocker-cap,.pui-xy-puck{ transition:none !important; animation:none !important; }
