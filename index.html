@@ -1184,7 +1184,8 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
     // bounce
     let i=arpPos; if(i>=len){ i=len-1; } arpPos+=arpDir; if(arpPos>=len-1||arpPos<=0) arpDir*=-1; return Math.max(0,Math.min(len-1,i)); }
   function scheduleStep(step, when){
-    if(!state.arp) return; const every = state.arpspd===16?1 : state.arpspd===8?2 : 4;
+    if(!state.arp || state.mode!=='explore') return;   // Motion belongs to Explore; Play never arps
+    const every = state.arpspd===16?1 : state.arpspd===8?2 : 4;
     if(step%every!==0) return; const pool=arpPool(); if(!pool.length) return;
     const idx=nextArpIndex(pool.length); const midi=pool[idx];
     spawn(midi, when, step16Dur()*every*0.9, 0, state.morphY);
@@ -1274,16 +1275,21 @@ document.querySelector('#music .drawmodes').addEventListener('click',e=>{const b
   document.getElementById('synRel').oninput=e=>state.rel=expo(+e.target.value/100,0.08,2.4);
   document.getElementById('synCut').oninput=e=>{state.cutKnob=+e.target.value/100; applyFilter();};
   document.getElementById('synRes').oninput=e=>{state.resKnob=+e.target.value/100; applyFilter();};
-  document.getElementById('synArp').onclick=e=>{ state.arp=!state.arp; e.target.classList.toggle('on',state.arp); e.target.textContent='✨ Motion: '+(state.arp?'on':'off'); heldChanged(); };
+  function syncArpBtn(){ const a=document.getElementById('synArp'); a.classList.toggle('on',state.arp); a.textContent='✨ Motion: '+(state.arp?'on':'off'); }
+  // Play = a clean keyboard (no arp). Explore = scale-locked + gentle motion.
+  function setMode(m){ state.mode=m; const ex=(m==='explore');
+    const btn=document.getElementById('synModeBtn'); btn.classList.toggle('explore',ex); btn.textContent=ex?'🌈 Explore':'🎹 Play';
+    state.arp=ex; syncArpBtn();
+    setSynNote(ex?'Explore — no wrong notes + gentle motion. Slide up/down to morph.':'Play — a real keyboard for your tunes. Slide up/down to morph.');
+    latched=[]; resetArp(); }
+  document.getElementById('synArp').onclick=()=>{ if(state.mode!=='explore'){ setMode('explore'); return; }  // turning Motion on from Play enters Explore
+    state.arp=!state.arp; syncArpBtn(); heldChanged(); };
   document.getElementById('synDlyMix').oninput=e=>{ if(built) G.dInput.gain.setTargetAtTime(+e.target.value/100*0.7, G.t.currentTime,0.03); };
   document.getElementById('synDlyFb').oninput=e=>{ if(built) G.dFb.gain.setTargetAtTime(+e.target.value/100, G.t.currentTime,0.03); };
   document.getElementById('synRev').oninput=e=>{ if(built) G.rInput.gain.setTargetAtTime(+e.target.value/100*0.9, G.t.currentTime,0.03); };
   document.getElementById('synBpm').oninput=e=>{ state.bpm=+e.target.value; document.getElementById('synBpmVal').textContent=state.bpm; applyDelayTime(); };
   document.getElementById('synBars').onchange=e=>state.bars=+e.target.value;
-  document.getElementById('synModeBtn').onclick=e=>{ state.mode = state.mode==='play'?'explore':'play';
-    const ex=state.mode==='explore'; e.target.classList.toggle('explore',ex); e.target.textContent=ex?'🌈 Explore':'🎹 Play';
-    if(ex && !state.arp){ state.arp=true; const a=document.getElementById('synArp'); a.classList.add('on'); a.textContent='✨ Motion: on'; }
-    setSynNote(ex?'Explore — no wrong notes, gentle motion. Slide up/down to morph.':'Play — real notes, find your tunes. Slide up/down to morph.'); latched=[]; resetArp(); };
+  document.getElementById('synModeBtn').onclick=()=>setMode(state.mode==='play'?'explore':'play');
   document.getElementById('synRec').onclick=e=>{ ac(); ensureGraph(); if(rec.armed||rec.active){ cancelRecord(); setSynNote('Recording cancelled.'); return; }
     e.target.classList.add('rec'); e.target.textContent='● Recording'; document.getElementById('synSave').disabled=true; document.getElementById('synKeep').disabled=true; lastClip=null; armRecord(); };
   document.getElementById('synSave').onclick=()=>{ const clip=exportClip(); if(!clip) return;
