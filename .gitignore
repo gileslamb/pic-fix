@@ -29,3 +29,8 @@ npm-debug.log*
 
 # Source art (not needed in repo)
 assets/pixfix-source.png
+
+# Cloudflare Worker local state / deps
+worker/.wrangler/
+worker/node_modules/
+.dev.vars

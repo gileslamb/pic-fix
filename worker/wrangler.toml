@@ -1,0 +1,9 @@
+name = "pixfix"
+main = "src/index.js"
+compatibility_date = "2026-07-11"
+account_id = "90522b3dad0012adb50674261bd43351"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pixfix"
+database_id = "e5433679-fbe5-47de-b52d-480123deb57d"

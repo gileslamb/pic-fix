@@ -544,8 +544,23 @@ const SEED=[
 ];
 function loadLive(){try{return JSON.parse(store.get('pf-lib')||'[]')}catch(e){return []}}
 function saveLive(a){store.set('pf-lib',JSON.stringify(a))}
-function allItems(){                       // seed + live, deduped by id (live wins so a parent can re-tag / archive a seed item)
+/* REMOTE = the approved library from the pixfix Worker (D1). Cached to localStorage
+   so a PWA opened offline still shows the last-known live library; if the Worker is
+   unreachable and there's no cache, the embedded SEED is the fallback.            */
+const API_BASE="https://pixfix.gileslamb.workers.dev";
+let REMOTE=(()=>{try{return JSON.parse(store.get('pf-remote')||'[]')}catch(e){return []}})();
+function saveRemote(a){REMOTE=Array.isArray(a)?a:[]; store.set('pf-remote',JSON.stringify(REMOTE));}
+async function syncLibrary(){
+  try{
+    const r=await fetch(API_BASE+'/library',{cache:'no-store'});
+    if(!r.ok) throw new Error('http '+r.status);
+    const data=await r.json();
+    if(Array.isArray(data)){ saveRemote(data); if(window.refreshAll) refreshAll(); }
+  }catch(e){ /* offline / Worker down — cached REMOTE + embedded SEED remain the fallback */ }
+}
+function allItems(){                       // seed + remote(D1) + live, deduped by id (later layer wins)
   const m=new Map(); SEED.forEach(it=>m.set(it.yt,{...it}));
+  REMOTE.forEach(it=>m.set(it.yt,{...(m.get(it.yt)||{}),...it,src:it.src||'remote'}));
   loadLive().forEach(it=>m.set(it.yt,{...(m.get(it.yt)||{}),...it,src:it.src||'parent'}));
   return [...m.values()];
 }
@@ -1480,6 +1495,7 @@ function refreshAll(){
   renderDeck(); checkDone(); buildWatch(); renderSearch(si.value||'');
   if(document.getElementById('pfManager')) renderManager();
 }
+window.refreshAll=refreshAll;   // let syncLibrary() re-render once the D1 library arrives
 
 /* ---- the questions → prompt → search → paste blocks ---- */
 const PROMPTS=[
@@ -1693,6 +1709,7 @@ document.getElementById('pfGateCancel').onclick=()=>gate.classList.remove('show'
 document.getElementById('parentBtn').onclick=openGate;
 
 refreshAll();
+syncLibrary();   // pull the approved library from the pixfix Worker (D1); re-renders on arrival
 </script>
 <script>
 /* register the service worker (harmless no-op where unsupported) */
