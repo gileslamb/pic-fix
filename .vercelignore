@@ -1,0 +1,3 @@
+# The Pixfix app is the static repo root; the Cloudflare Worker is deployed
+# separately via wrangler and must not be served by Vercel.
+worker/
