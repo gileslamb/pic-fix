@@ -22,6 +22,23 @@ const json = (data, status = 200) =>
     headers: { 'Content-Type': 'application/json', ...CORS },
   });
 
+/* iOS/macOS Shortcuts choke on turning a JSON body into a dictionary. When the
+   caller opts into text (Accept: text/plain, or ?format=text) reply with the
+   bare human message as text/plain — the Shortcut can show it with no parsing. */
+function wantsText(request, url) {
+  const accept = (request.headers.get('Accept') || '').toLowerCase();
+  return url.searchParams.get('format') === 'text' || accept.includes('text/plain');
+}
+function reply(request, url, obj, status = 200) {
+  if (wantsText(request, url)) {
+    return new Response(`${obj.message || obj.error || ''}\n`, {
+      status,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS },
+    });
+  }
+  return json(obj, status);
+}
+
 const GROUP_KEYS = ['make', 'learn', 'move', 'watch', 'wind'];
 const GROUP_LABELS = { make: 'Make', learn: 'Learn', move: 'Move', watch: 'Watch together', wind: 'Wind-down' };
 
@@ -126,18 +143,18 @@ async function handleShare(request, env) {
   let trust = null;
   if (env.PARENT_TOKEN && token === env.PARENT_TOKEN) trust = 'parent';
   else if (env.CHILD_TOKEN && token === env.CHILD_TOKEN) trust = 'child';
-  if (!trust) return json({ error: 'unauthorized', message: 'Bad or missing token.' }, 401);
+  if (!trust) return reply(request, url, { error: 'unauthorized', message: 'Bad or missing token.' }, 401);
 
   const shared = body.url || url.searchParams.get('url') || '';
   const ytId = parseYouTubeId(shared);
-  if (!ytId) return json({ error: 'bad_url', message: "That doesn't look like a YouTube link." }, 400);
+  if (!ytId) return reply(request, url, { error: 'bad_url', message: "That doesn't look like a YouTube link." }, 400);
 
   // Dedupe on yt_id — friendly, not an error.
   const existing = await env.DB.prepare(
     'SELECT yt_id, title, status FROM videos WHERE yt_id = ?'
   ).bind(ytId).first();
   if (existing) {
-    return json({
+    return reply(request, url, {
       status: 'exists',
       yt_id: ytId,
       title: existing.title,
@@ -158,7 +175,7 @@ async function handleShare(request, env) {
     const message = food_group
       ? `Added "${name}" to ${GROUP_LABELS[food_group]}.`
       : `Added "${name}" — needs a food group (set it in the grown-up section).`;
-    return json({ status: 'added', yt_id: ytId, title, channel, food_group, message });
+    return reply(request, url, { status: 'added', yt_id: ytId, title, channel, food_group, message });
   }
 
   // child → pending; categorisation happens on approval (step 4)
@@ -166,7 +183,7 @@ async function handleShare(request, env) {
     `INSERT INTO videos (yt_id, title, channel, food_group, status, added_by, added_at)
      VALUES (?, ?, ?, NULL, 'pending', 'child', ?)`
   ).bind(ytId, title, channel, t).run();
-  return json({
+  return reply(request, url, {
     status: 'pending',
     yt_id: ytId,
     title,
