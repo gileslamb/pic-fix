@@ -1691,6 +1691,8 @@ window.addEventListener('resize',()=>{ if(document.getElementById('draw').classL
   .pf-item .meta .t{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#fff;padding:2px 7px;border-radius:99px;}
   .pf-item .act{background:none;border:none;font-size:15px;cursor:pointer;color:var(--ink-soft);}
   .pf-note{font-size:12px;color:var(--ink-soft);line-height:1.5;margin:2px 0 16px;}
+  .pf-warn{background:rgba(255,90,95,.12);border:1.5px solid rgba(255,90,95,.5);border-radius:16px;padding:13px 15px;margin:0 0 16px;font-size:12.5px;line-height:1.55;color:var(--ink);}
+  .pf-steps{margin:0;padding-left:20px;font-size:12px;color:var(--ink-soft);line-height:1.6;} .pf-steps li{margin-bottom:6px;} .pf-steps code{font-size:11px;}
   .pf-ta{width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:11px;padding:12px;border-radius:14px;border:1.5px solid var(--glass-brd);background:var(--glass);color:var(--ink);box-sizing:border-box;}
   .pf-soon{opacity:.55;pointer-events:none;}
   .pf-ok{color:var(--move);font-weight:700;font-size:13px;min-height:18px;margin-top:6px;}
@@ -1748,6 +1750,7 @@ sheet.innerHTML=`
       <button class="pf-tab on" data-v="requests">Requests<span class="qbadge" id="pfQBadge" hidden></span></button>
       <button class="pf-tab" data-v="watched">Watched</button>
       <button class="pf-tab" data-v="guide">Start here</button>
+      <button class="pf-tab" data-v="setup">Setup</button>
       <button class="pf-tab" data-v="add">Add videos</button>
       <button class="pf-tab" data-v="lib">Library</button>
       <button class="pf-tab" data-v="settings">Settings</button>
@@ -1776,6 +1779,29 @@ sheet.innerHTML=`
         <p class="pf-note" style="margin:0;">The <b>piano</b> page plays real beginner songs — choose which ones appear in the <b>Tunes</b> tab. The <b>drawing</b> page shows colouring patterns that match whatever theme your child has picked, so there's nothing to set there.</p></div>
       <div class="pf-q"><label>Keep it safe &amp; backed up</label>
         <p class="pf-note" style="margin:0;">The library lives in the cloud and syncs across devices. Visit <b>Backup</b> now and then to export a JSON copy as insurance. To pin the iPad to Pixfix during a session, triple-click the side button for <b>Guided Access</b>.</p></div>
+    </div>
+    <div class="pf-view" id="pfSetup">
+      <div class="pf-warn"><b>⚠️ These shortcuts point at YOUR family's library.</b> Right now Pixfix has one shared library and one token pair. Anyone you hand these to adds to — and sees — the <b>same</b> library on the same devices. Separate per-family libraries are a later step, so don't share this as-is expecting privacy between households.</div>
+      <div class="pf-q"><label>What Pixfix is</label>
+        <p class="pf-note" style="margin:0;">A calm, <b>finite</b> space — the opposite of an endless feed. Each day is a short deck that <b>ends</b>. Everything in it is chosen by a grown-up. No open search for the child, no autoplay, no “up next”, no rabbit hole.</p></div>
+      <div class="pf-q"><label>The daily deck</label>
+        <p class="pf-note" style="margin:0;">A handful of videos a day (you set how many in <b>Settings</b>), balanced across five food groups — <b>Make · Learn · Move · Watch together · Wind-down</b>. Rotation keeps any one group from taking over. When the day's videos are done, a <b>PIXFIX-VISION closedown</b> ends the day; it resets quietly at midnight. A rainbow meter fills as the day spans the groups — no points, no streaks, just the balanced plate made visible.</p></div>
+      <div class="pf-q"><label>How videos get in</label>
+        <p class="pf-note" style="margin:0;">Three ways, all gated: <b>1.</b> your child asks for one in the app → it lands in <b>Requests</b> for you to Approve or Decline. <b>2.</b> you <b>share</b> a YouTube link to Pixfix from anywhere → straight into the library, auto-filed. <b>3.</b> you paste a link in the <b>Library</b> tab's quick-add. Nothing a child adds reaches the deck until you approve it.</p></div>
+      <div class="pf-q"><label>Install the share Shortcut (about 2 minutes)</label>
+        <p class="pf-note" style="margin:0 0 8px;">The share sheet is the fastest way to add videos. On the iPhone/iPad:</p>
+        <ol class="pf-steps">
+          <li>Open the iCloud Shortcut link: <code>[paste your parent-share Shortcut iCloud link here]</code> → <b>Add Shortcut</b>.</li>
+          <li>Edit it once: find the <code>token</code> field and replace <code>PASTE_PARENT_TOKEN</code> with your parent token.</li>
+          <li>Done. In YouTube (or anywhere), tap <b>Share → Pixfix</b> and the video is added and filed. You'll get a one-line confirmation.</li>
+        </ol>
+        <p class="pf-note" style="margin:8px 0 0;">A child-share Shortcut (adds to <b>Requests</b> instead of the library) can be installed the same way with the child token — optional, and separate from the in-app request flow.</p></div>
+      <div class="pf-q"><label>Sign in the back office</label>
+        <p class="pf-note" style="margin:0;">The sums are just a friendly cover. The real lock is the <b>parent token</b>: enter it once on each grown-up device and it's stored on <b>that device only</b> — never on your child's. That's what gates Requests, approvals, and library changes.</p></div>
+      <div class="pf-q"><label>Put it on the iPad &amp; lock the session</label>
+        <p class="pf-note" style="margin:0;">In Safari, open the app URL → <b>Share → Add to Home Screen</b> for a full-screen app. During a session, triple-click the side button for <b>Guided Access</b> so she can't swipe out.</p></div>
+      <div class="pf-q"><label>Back up now and then</label>
+        <p class="pf-note" style="margin:0;">The library is in the cloud and syncs across devices, but there's no undo on a deletion. Visit <b>Backup</b> occasionally to export a JSON copy as insurance.</p></div>
     </div>
     <div class="pf-view" id="pfAdd">
       <p class="pf-note">Answer what fits, tap <b>Search on YouTube</b>, and when you find something good, copy its link and paste it back into that question's box. Links you send here go to the <b>approval queue</b> — a grown-up okays them (and sets the food group) before they reach your child. To add something instantly, share it to Pixfix from YouTube's share sheet.</p>
@@ -1991,7 +2017,7 @@ function renderTuneList(){const box=sheet.querySelector('#pfTuneList'); if(!box)
 /* tab switching */
 sheet.querySelectorAll('.pf-tab').forEach(t=>t.onclick=()=>{
   sheet.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
-  const map={requests:'pfQueue',guide:'pfGuide',add:'pfAdd',lib:'pfLib',settings:'pfSettings',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
+  const map={requests:'pfQueue',watched:'pfWatched',guide:'pfGuide',setup:'pfSetup',add:'pfAdd',lib:'pfLib',settings:'pfSettings',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
   sheet.querySelectorAll('.pf-view').forEach(v=>v.classList.remove('on'));
   sheet.querySelector('#'+map[t.dataset.v]).classList.add('on');
   if(t.dataset.v==='requests') renderQueue();
