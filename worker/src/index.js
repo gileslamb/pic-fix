@@ -362,6 +362,18 @@ async function handleAdmin(request, env) {
     return json({ deck_n: n });
   }
 
+  // Recent watch history for parent visibility (Step 4d). Eventually-consistent —
+  // her rainbow/deck never wait on this; offline watches flush later.
+  if (sub === 'watched' && request.method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT w.yt_id, w.watched_at, v.title, v.channel, v.food_group
+         FROM watch_events w LEFT JOIN videos v ON v.yt_id = w.yt_id
+        ORDER BY w.watched_at DESC, w.id DESC
+        LIMIT 100`
+    ).all();
+    return json(results || []);
+  }
+
   // Full library export — cheap insurance against a bad remove or a provider
   // mishap (D1 has no undelete). Returns every video row for a manual/Claude-Code
   // restore. This is the cloud library, not local device state.
@@ -413,6 +425,21 @@ export default {
 
       if (pathname === '/share' && request.method === 'POST') {
         return await handleShare(request, env, ctx);
+      }
+
+      // Write-through watch log (Step 4d). Deck/rotation/rainbow keep reading the
+      // local day-set for speed; this is the long-term "what has she watched"
+      // record for parent visibility. Origin-gated (her device stays tokenless);
+      // the client sends watched_at so an offline event keeps its real time on flush.
+      if (pathname === '/watched' && request.method === 'POST') {
+        if (!originAllowed(request, env)) return json({ error: 'forbidden_origin' }, 403);
+        let b = {}; try { b = await request.json(); } catch { /* empty */ }
+        const ytId = String(b.yt_id || '');
+        if (!/^[A-Za-z0-9_-]{11}$/.test(ytId)) return json({ error: 'bad_id' }, 400);
+        const ts = parseInt(b.watched_at, 10) || nowSecs();
+        await env.DB.prepare('INSERT INTO watch_events (yt_id, watched_at) VALUES (?, ?)').bind(ytId, ts).run();
+        await env.DB.prepare('UPDATE videos SET play_count = play_count + 1, last_served = ? WHERE yt_id = ?').bind(ts, ytId).run();
+        return json({ ok: true });
       }
 
       // Per-id status for the child's "you asked for" shelf, so her requests never

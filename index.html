@@ -751,7 +751,26 @@ function markWatched(it){
   rolloverDay();
   if(DAY.watched.some(w=>w.yt===it.yt)) return;        // already watched today → don't re-count, don't re-fill the rainbow
   DAY.watched.push({yt:it.yt,g:it.g}); saveDay();
+  recordWatch(it.yt);                                  // write-through to D1 (parent visibility); local day-set stays the fast truth
   renderDeck(); checkDone(); renderRainbow(); buildWatch();
+}
+/* WATCHED-STATE → D1 (Step 4d). Truth split: the local day-set above answers
+   "today's deck / rotation / rainbow" (fast, offline-first); D1's watch_events is
+   the long-term "what has she watched" for parent visibility. Sync is local → D1,
+   write-through and fire-and-forget: enqueue durably, flush now, and retry queued
+   events on the next load / online. Her experience never waits on the network. */
+function loadOutbox(){ try{const a=JSON.parse(store.get('pf-watch-outbox')||'[]'); return Array.isArray(a)?a:[];}catch(e){return [];} }
+function saveOutbox(a){ store.set('pf-watch-outbox',JSON.stringify(a)); }
+function recordWatch(yt){ const box=loadOutbox(); box.push({yt, ts:Math.floor(Date.now()/1000)}); saveOutbox(box); flushWatchOutbox(); }
+async function flushWatchOutbox(){
+  const box=loadOutbox(); if(!box.length) return;
+  const remaining=[];
+  for(const ev of box){
+    try{ const r=await fetch(API_BASE+'/watched',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({yt_id:ev.yt,watched_at:ev.ts})});
+      if(!r.ok) remaining.push(ev);
+    }catch(e){ remaining.push(ev); }
+  }
+  saveOutbox(remaining);
 }
 /* SKIP = skip-refill: the next eligible candidate takes the slot today. Skips
    don't count as plays, so repeated skipping is effectively a "next" button —
@@ -1727,6 +1746,7 @@ sheet.innerHTML=`
   <div class="pf-body">
     <div class="pf-tabs">
       <button class="pf-tab on" data-v="requests">Requests<span class="qbadge" id="pfQBadge" hidden></span></button>
+      <button class="pf-tab" data-v="watched">Watched</button>
       <button class="pf-tab" data-v="guide">Start here</button>
       <button class="pf-tab" data-v="add">Add videos</button>
       <button class="pf-tab" data-v="lib">Library</button>
@@ -1738,6 +1758,10 @@ sheet.innerHTML=`
     <div class="pf-view on" id="pfQueue">
       <p class="pf-note">Videos <b>Gabriela has asked for</b>. Tap <b>Approve</b> to add one to the library (the suggested food group is pre-picked — change it if you like), or <b>Decline</b>. A declined video stays declined; nothing is lost.</p>
       <div id="pfQueueList"></div>
+    </div>
+    <div class="pf-view" id="pfWatched">
+      <p class="pf-note">What she's watched recently. This is a record for you — it doesn't change her deck, rainbow or rotation (those run on the device). Offline watches show up here once she's back online.</p>
+      <div id="pfWatchedList"></div>
     </div>
     <div class="pf-view" id="pfGuide">
       <div class="pf-q"><label>What Pixfix is</label>
@@ -1971,6 +1995,7 @@ sheet.querySelectorAll('.pf-tab').forEach(t=>t.onclick=()=>{
   sheet.querySelectorAll('.pf-view').forEach(v=>v.classList.remove('on'));
   sheet.querySelector('#'+map[t.dataset.v]).classList.add('on');
   if(t.dataset.v==='requests') renderQueue();
+  if(t.dataset.v==='watched') renderWatched();
   if(t.dataset.v==='lib'||t.dataset.v==='arch') renderManager();
   if(t.dataset.v==='settings') renderSettings();
   if(t.dataset.v==='tunes') renderTuneList();
@@ -2013,6 +2038,25 @@ function queueRow(it){
     refreshBadge(); renderQueue();
   };
   return row;
+}
+function whenText(ts){ if(!ts) return ''; const diff=Math.floor(Date.now()/1000)-ts;
+  if(diff<3600) return `${Math.max(1,Math.round(diff/60))} min ago`;
+  if(diff<86400) return `${Math.round(diff/3600)}h ago`;
+  const d=Math.round(diff/86400); return d<=1?'yesterday':`${d} days ago`; }
+async function renderWatched(){
+  const box=sheet.querySelector('#pfWatchedList'); if(!box) return;
+  box.innerHTML='<p class="pf-note">Loading…</p>';
+  let items;
+  try{ const r=await admin('watched'); if(r.status===401){ clearParentToken(); box.innerHTML='<p class="pf-note">This device is no longer signed in — reopen the grown-up section.</p>'; return; } items=await r.json(); }
+  catch(e){ box.innerHTML='<p class="pf-note">Couldn’t reach the library. Check the connection.</p>'; return; }
+  if(!Array.isArray(items)||!items.length){ box.innerHTML='<p class="pf-note">Nothing watched yet.</p>'; return; }
+  box.innerHTML='';
+  items.forEach(it=>{ const grp=GROUPS[it.food_group]||GROUPS.watch;
+    const row=document.createElement('div'); row.className='pf-item';
+    row.innerHTML=`<img src="${thumbURL(it.yt_id)}" alt="" /><div class="meta"><h4>${it.title||it.yt_id}</h4>
+      <div class="tags"><span class="t" style="background:${it.food_group?grp.color:'var(--ink-soft)'}">${it.food_group?grp.label:'—'}</span><span class="t" style="background:transparent;color:var(--ink-soft);padding-left:0;">${whenText(it.watched_at)}</span></div></div>`;
+    box.appendChild(row);
+  });
 }
 async function renderQueue(){
   const box=sheet.querySelector('#pfQueueList'); if(!box) return;
@@ -2092,7 +2136,9 @@ document.getElementById('pfTokCancel').onclick=()=>tgate.classList.remove('show'
 refreshAll();
 refreshBadge();  // show any waiting-request count on the lock without opening it
 pollRequests();  // resolve her "You asked for" shelf (waiting / arrived / declined)
-setInterval(()=>{ refreshBadge(); pollRequests(); }, 60000);
+flushWatchOutbox();  // send any watch events queued offline
+setInterval(()=>{ refreshBadge(); pollRequests(); flushWatchOutbox(); }, 60000);
+window.addEventListener('online', flushWatchOutbox);
 syncLibrary();   // pull the approved library from the pixfix Worker (D1); re-renders on arrival
 syncConfig();    // pull deck size N from D1 config so a parent dial on any device reaches this one
 </script>
