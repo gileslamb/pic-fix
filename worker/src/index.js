@@ -67,6 +67,13 @@ function tokenOf(request, url, body) {
 function isParent(request, url, body, env) {
   return !!env.PARENT_TOKEN && tokenOf(request, url, body) === env.PARENT_TOKEN;
 }
+/* Origin allowlist for the tokenless child endpoints (/share add, /status). Origin
+   is spoofable by non-browser clients, so it's a deterrent, not a wall — permissive
+   until ALLOWED_ORIGINS is set. */
+function originAllowed(request, env) {
+  const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  return allowed.length ? allowed.includes(request.headers.get('Origin') || '') : true;
+}
 
 /* Pull an 11-char YouTube id from a share. Handles youtu.be, youtube.com/watch,
    /shorts, /live, /embed, m.youtube.com, and a bare id. */
@@ -166,12 +173,8 @@ async function handleShare(request, env, ctx) {
   // Origin is spoofable by non-browser clients, so this pairs with the pending
   // cap below — together they bound anonymous abuse. Permissive only if
   // ALLOWED_ORIGINS is unset, so nothing breaks before it's configured.
-  if (tokenless) {
-    const origin = request.headers.get('Origin') || '';
-    const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
-    if (allowed.length && !allowed.includes(origin)) {
-      return reply(request, url, { error: 'forbidden_origin', message: 'Add videos from inside the Pixfix app.' }, 403);
-    }
+  if (tokenless && !originAllowed(request, env)) {
+    return reply(request, url, { error: 'forbidden_origin', message: 'Add videos from inside the Pixfix app.' }, 403);
   }
 
   const shared = body.url || url.searchParams.get('url') || '';
@@ -359,6 +362,22 @@ export default {
 
       if (pathname === '/share' && request.method === 'POST') {
         return await handleShare(request, env, ctx);
+      }
+
+      // Per-id status for the child's "you asked for" shelf, so her requests never
+      // feel like they vanish. Only echoes status for ids the caller already knows;
+      // origin-gated (same low-stakes deterrent as the tokenless add path).
+      if (pathname === '/status' && request.method === 'GET') {
+        if (!originAllowed(request, env)) return json({ error: 'forbidden_origin' }, 403);
+        const ids = (url.searchParams.get('ids') || '').split(',').map((s) => s.trim())
+          .filter((s) => /^[A-Za-z0-9_-]{11}$/.test(s)).slice(0, 50);
+        if (!ids.length) return json({});
+        const { results } = await env.DB.prepare(
+          `SELECT yt_id, status FROM videos WHERE yt_id IN (${ids.map(() => '?').join(',')})`
+        ).bind(...ids).all();
+        const map = {};
+        (results || []).forEach((r) => { map[r.yt_id] = r.status; });
+        return json(map);
       }
 
       if (pathname.startsWith('/admin/')) {

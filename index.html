@@ -134,6 +134,17 @@
 
   .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
   .wsec-h{font-family:var(--disp); font-weight:700; font-size:17px; margin:22px 0 12px; color:var(--ink);} #watchGrid .wsec-h:first-child{margin-top:4px;}
+  #reqShelf .wsec-h{margin-top:4px;}
+  .reqlist{display:flex; flex-direction:column; gap:10px; margin-bottom:6px;}
+  .req{display:flex; align-items:center; gap:11px; padding:9px; border-radius:16px; background:var(--glass); border:1.5px solid var(--glass-brd);}
+  .req img{width:80px; height:50px; object-fit:cover; border-radius:9px; flex:none; background:#0B0A0C;}
+  .req .reqmeta{flex:1; min-width:0;}
+  .req .reqmeta h4{font-family:var(--disp); font-weight:700; font-size:14px; margin:0 0 3px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .req .reqstate{font-family:var(--disp); font-weight:700; font-size:11px; letter-spacing:.3px; padding:3px 9px; border-radius:99px; display:inline-block;}
+  .req.pending .reqstate{background:rgba(128,128,128,.18); color:var(--ink-soft);}
+  .req.approved{cursor:pointer;} .req.approved .reqstate{background:var(--move); color:#fff;}
+  .req.declined{opacity:.72;} .req.declined .reqstate{background:transparent; color:var(--ink-soft); padding-left:0;}
+  .reqx{background:none; border:none; font-size:16px; color:var(--ink-soft); cursor:pointer; flex:none; padding:4px 8px;}
   .tile{cursor:pointer; padding:10px; border-radius:24px; background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1.5px solid var(--glass-brd); box-shadow:0 8px 22px var(--shadow); transition:transform .14s;}
   .tile:active{transform:scale(.97);}
   .tile .art{position:relative; height:96px; border-radius:18px; display:grid; place-items:center; font-size:34px; margin-bottom:9px; overflow:hidden;}
@@ -330,6 +341,7 @@
     <section class="panel" id="watch">
       <div class="eyebrow">The library</div><h1 class="h1">Watch together</h1>
       <p class="sub">Only the things we've said yes to. No up-next, no rabbit holes.</p>
+      <div id="reqShelf"></div>
       <div id="watchGrid"></div>
     </section>
 
@@ -707,6 +719,7 @@ document.getElementById('nav').addEventListener('click',e=>{
   document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
   panels.forEach(p=>p.classList.remove('active')); document.getElementById(b.dataset.tab).classList.add('active');
   if(b.dataset.tab==='draw') refitDraw();
+  if(b.dataset.tab==='watch') pollRequests();   // refresh her "You asked for" shelf on arrival
   if(b.dataset.tab==='made' && window.pfRenderMade) window.pfRenderMade();
   if(b.dataset.tab==='music'){ if(musicMode==='synth' && window.pfSynth) window.pfSynth.show(); }
   else if(window.pfSynth){ window.pfSynth.hide(); }
@@ -814,8 +827,43 @@ function watchSection(title,items){
   const h=document.createElement('h2'); h.className='wsec-h'; h.textContent=title; wg.appendChild(h);
   const g=document.createElement('div'); g.className='grid'; items.forEach(it=>g.appendChild(tileFor(it))); wg.appendChild(g); return g;
 }
+/* ---- "You asked for" — child-visible request state ----
+   Her requests must never feel like they vanish (the live test produced exactly
+   that within minutes). We track the yt_ids she's submitted locally, and a
+   lightweight /status poll tells us when one is approved (it arrives in the
+   library) or declined. Copy keeps the app as the world and the parent as the
+   gate — a decline reads "a grown-up said not this one", never a scold. */
+function loadReq(){ try{const a=JSON.parse(store.get('pf-my-requests')||'[]'); return Array.isArray(a)?a:[];}catch(e){return [];} }
+function saveReq(a){ store.set('pf-my-requests',JSON.stringify(a)); }
+function addReq(yt,title){ const a=loadReq(); if(!a.some(x=>x.yt===yt)){ a.push({yt,title:title||yt}); saveReq(a); } }
+function dropReq(yt){ saveReq(loadReq().filter(x=>x.yt!==yt)); }
+function reqStatus(){ try{return JSON.parse(store.get('pf-req-status')||'{}')||{};}catch(e){return {};} }
+async function pollRequests(){
+  const ids=loadReq().map(x=>x.yt); if(!ids.length){ renderRequests(); return; }
+  try{ const r=await fetch(API_BASE+'/status?ids='+ids.join(','),{cache:'no-store'}); const m=await r.json();
+    if(m&&typeof m==='object') store.set('pf-req-status',JSON.stringify(m));
+  }catch(e){ /* offline — keep the last-known statuses */ }
+  renderRequests();
+}
+function renderRequests(){
+  const box=document.getElementById('reqShelf'); if(!box) return;
+  const reqs=loadReq(); if(!reqs.length){ box.innerHTML=''; return; }
+  const st=reqStatus();
+  const cards=reqs.map(r=>{
+    const approved=LIBRARY.some(it=>it.yt===r.yt);
+    const state=approved?'approved':(st[r.yt]||'pending');
+    const label=state==='approved'?'✓ It’s here!':state==='declined'?'A grown-up said not this one':'⏳ Waiting for a grown-up';
+    return `<div class="req ${state}" data-yt="${r.yt}"><img src="${thumbURL(r.yt)}" alt="" /><div class="reqmeta"><h4>${r.title}</h4><span class="reqstate">${label}</span></div>${state==='pending'?'':'<button class="reqx" title="Clear" aria-label="Clear">✕</button>'}</div>`;
+  }).join('');
+  box.innerHTML=`<h2 class="wsec-h">You asked for</h2><div class="reqlist">${cards}</div>`;
+  box.querySelectorAll('.req').forEach(el=>{ const yt=el.dataset.yt;
+    const x=el.querySelector('.reqx'); if(x) x.onclick=e=>{ e.stopPropagation(); dropReq(yt); renderRequests(); };
+    if(LIBRARY.some(it=>it.yt===yt)) el.onclick=()=>{ const it=LIBRARY.find(i=>i.yt===yt); if(it) openPlayer(it); };
+  });
+}
 function buildWatch(){
   rolloverDay();
+  renderRequests();
   wg.innerHTML='';
   /* Watched shelf — what's been played today, kept in view (never removed) so a
      child can happily re-watch. A replay doesn't re-count (see markWatched). The
@@ -1785,19 +1833,19 @@ sheet.querySelectorAll('.pf-parse').forEach(b=>b.onclick=()=>{const pi=+b.datase
     if(!rows.length){ ok.textContent='Nothing new to send.'; setTimeout(()=>ok.textContent='',3000); return; }
     commit.disabled=true; commit.textContent='Sending…';
     let queued=0,exists=0,failed=0;
-    for(const ch of rows){ const id=ch.dataset.id;
+    for(const ch of rows){ const id=ch.dataset.id; const title=(ch.querySelector('input').value||'').trim();
       try{
         const r=await fetch(API_BASE+'/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://youtu.be/'+id})});
         const d=await r.json().catch(()=>({}));
-        if(d.status==='pending'||d.status==='added') queued++;
+        if(d.status==='pending'||d.status==='added'){ queued++; addReq(id,d.title||title); }   // track for her "You asked for" shelf
         else if(d.status==='exists') exists++;
         else failed++;
       }catch(e){ failed++; }
     }
     ta.value=''; stage.innerHTML=''; commit.disabled=false;
     const parts=[]; if(queued)parts.push(`Sent ${queued} for a grown-up to approve`); if(exists)parts.push(`${exists} already in the library`); if(failed)parts.push(`${failed} couldn't be sent — check the connection`);
-    ok.textContent=(parts.join(' · ')||'Nothing sent')+'.'; setTimeout(()=>ok.textContent='',6000);
-    syncLibrary(); refreshAll();
+    ok.textContent=(parts.join(' · ')||'Nothing sent')+'.'+(queued?` Find ${queued===1?'it':'them'} under “You asked for” on the Watch page.`:''); setTimeout(()=>ok.textContent='',7000);
+    syncLibrary(); refreshAll(); pollRequests();
   };
   stage.appendChild(commit);
 });
@@ -2038,7 +2086,8 @@ document.getElementById('pfTokCancel').onclick=()=>tgate.classList.remove('show'
 
 refreshAll();
 refreshBadge();  // show any waiting-request count on the lock without opening it
-setInterval(refreshBadge, 60000);
+pollRequests();  // resolve her "You asked for" shelf (waiting / arrived / declined)
+setInterval(()=>{ refreshBadge(); pollRequests(); }, 60000);
 syncLibrary();   // pull the approved library from the pixfix Worker (D1); re-renders on arrival
 </script>
 <script>
