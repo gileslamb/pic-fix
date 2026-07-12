@@ -1,7 +1,14 @@
 /* Pixfix service worker — makes it a real installable app and lets the
    shell (piano, drawing, themes, today's deck) work with no connection.
-   Videos and fresh thumbnails still need the network, as expected.        */
-const CACHE = 'pixfix-v7';
+   Videos and fresh thumbnails still need the network, as expected.
+
+   CACHE VERSIONING (hard requirement): bump CACHE on every deploy that changes
+   shell assets. The app HTML itself is served NETWORK-FIRST (see below) so a new
+   deploy reaches devices on the next reload without waiting for a manual bump —
+   the cache-first-for-HTML mistake in v7 is what made 4a/4b invisible on already-
+   installed devices. Offline still falls back to the cached copy, so the PWA
+   survives with no connection.                                                */
+const CACHE = 'pixfix-v8';
 const SHELL = [
   './',
   './index.html',
@@ -39,9 +46,28 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+  // The app document: a navigation, the root, or index.html.
+  const isDoc = req.mode === 'navigate'
+    || (sameOrigin && (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('/index.html')));
+
+  if (isDoc) {
+    // NETWORK-FIRST for the HTML: always try the freshest app, refresh the cached
+    // copy, and fall back to cache only when offline. This is the update-on-reload
+    // behaviour — a new Vercel deploy shows up on the next reload.
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => { c.put('./index.html', copy).catch(() => {}); }).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+    );
+    return;
+  }
 
   if (sameOrigin || isFont) {
-    // cache-first, then fill the cache — shell + fonts survive offline
+    // cache-first for the rest of the shell + fonts (versioned by CACHE) — survives offline
     e.respondWith(
       caches.match(req).then(hit => hit || fetch(req).then(res => {
         const copy = res.clone();
