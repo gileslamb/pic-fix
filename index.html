@@ -111,13 +111,29 @@
   .card h3{font-family:var(--disp); font-weight:700; font-size:18px; margin:0; line-height:1.12; color:var(--ink);}
   .card p{margin:4px 0 0; font-size:12px; color:var(--ink-soft); font-weight:700;}
 
-  .done-state{text-align:center; padding:46px 10px; display:none;} .done-state.show{display:block;}
-  .done-state .big{font-size:60px;} .done-state h2{font-family:var(--disp); font-weight:700; font-size:26px; margin:10px 0 4px;}
+  /* rainbow meter — one segment per food group, fills on watch (day-scoped) */
+  .rainbow{margin:0 0 20px;} .rainbow .rbtrack{display:flex; gap:6px;}
+  .rainbow .seg{height:12px; flex:1; border-radius:99px; background:rgba(128,128,128,.20); box-shadow:inset 0 0 0 1.5px var(--glass-brd); transition:background .4s, transform .3s, box-shadow .4s;}
+  .rainbow .seg.on{box-shadow:none; transform:translateY(-1px);}
+  .rainbow .rbsticker{display:inline-block; margin-top:8px; font-family:var(--disp); font-weight:700; font-size:13px; color:var(--ink); animation:cardIn .5s both;}
+  /* skip control + last-programme ribbon on deck cards */
+  .card .skip{position:absolute; top:10px; right:10px; width:30px; height:30px; border-radius:50%; border:1.5px solid var(--glass-brd); background:var(--glass); color:var(--ink-soft); font-size:15px; cursor:pointer; display:grid; place-items:center; line-height:1;}
+  .card .skip:active{transform:scale(.9);}
+  .lastprog{display:inline-block; margin-top:7px; font-family:var(--disp); font-weight:700; font-size:11px; letter-spacing:.4px; text-transform:uppercase; color:#fff; background:var(--accent); padding:3px 10px; border-radius:99px; transform:rotate(-1.5deg);}
+
+  .done-state{text-align:center; padding:36px 10px; display:none;} .done-state.show{display:block;}
+  .done-state h2{font-family:var(--disp); font-weight:700; font-size:26px; margin:10px 0 4px;}
   .done-state p{color:var(--ink-soft); font-weight:600; font-size:14px; margin:0 0 20px;}
+  /* PIXFIX-VISION closedown / test pattern — the five food-group colours */
+  .testpattern{position:relative; height:120px; border-radius:20px; overflow:hidden; margin:0 auto 18px; max-width:320px;
+    background:linear-gradient(90deg,#FF5A5F 0 20%,#FFB01F 20% 40%,#2FBE7E 40% 60%,#3E8EF7 60% 80%,#9B6DFF 80% 100%);
+    box-shadow:0 12px 26px var(--shadow);}
+  .testpattern .tp-bug{position:absolute; left:50%; bottom:12px; transform:translateX(-50%); font-family:var(--disp); font-weight:800; font-size:13px; letter-spacing:2px; color:#fff; background:rgba(0,0,0,.55); padding:5px 12px; border-radius:8px;}
   .btn{font-family:var(--disp); font-weight:700; font-size:15px; border:none; border-radius:18px; padding:12px 22px; background:var(--accent); color:#fff; cursor:pointer;}
   .btn.ghost{background:var(--glass); color:var(--ink); border:1.5px solid var(--glass-brd);}
 
   .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .wsec-h{font-family:var(--disp); font-weight:700; font-size:17px; margin:22px 0 12px; color:var(--ink);} #watchGrid .wsec-h:first-child{margin-top:4px;}
   .tile{cursor:pointer; padding:10px; border-radius:24px; background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1.5px solid var(--glass-brd); box-shadow:0 8px 22px var(--shadow); transition:transform .14s;}
   .tile:active{transform:scale(.97);}
   .tile .art{position:relative; height:96px; border-radius:18px; display:grid; place-items:center; font-size:34px; margin-bottom:9px; overflow:hidden;}
@@ -301,14 +317,20 @@
       <h1 class="h1">Your picks for today</h1>
       <p class="sub" id="picksLeft">Five things, chosen together. When they're done, they're done.</p>
       <div class="progress" id="progress"></div>
+      <div class="rainbow" id="rainbow"></div>
       <div id="deck"></div>
-      <div class="done-state" id="doneState"><div class="big">🌙</div><h2>That's today's lot — nice one.</h2><p>No more to scroll. See you tomorrow.</p><button class="btn ghost" onclick="resetDeck()">Watch today again</button></div>
+      <div class="done-state" id="doneState">
+        <div class="testpattern"><span class="tp-bug">PIXFIX-VISION</span></div>
+        <h2>Finished broadcasting for today</h2>
+        <p>That's the lot — nice one. Everything you watched is on the Watch page.</p>
+        <button class="btn ghost" onclick="resetDeck()">Go to the Watch page</button>
+      </div>
     </section>
 
     <section class="panel" id="watch">
       <div class="eyebrow">The library</div><h1 class="h1">Watch together</h1>
       <p class="sub">Only the things we've said yes to. No up-next, no rabbit holes.</p>
-      <div class="grid" id="watchGrid"></div>
+      <div id="watchGrid"></div>
     </section>
 
     <section class="panel" id="draw">
@@ -566,18 +588,63 @@ function allItems(){                       // seed + remote(D1) + live, deduped 
 }
 function childLibrary(){return allItems().filter(it=>!it.archived)}
 function archivedItems(){return allItems().filter(it=>it.archived)}
-function pickToday(lib){                    // one per food group (newest first), then top up to 5
-  const out=[],seen=new Set();
-  const byRecent=[...lib].sort((a,b)=>(b.added||0)-(a.added||0));   // parent-added items carry a timestamp; seeds sort oldest
-  Object.keys(GROUPS).forEach(g=>{const it=byRecent.find(x=>x.g===g&&!seen.has(x.yt)); if(it){out.push(it.yt);seen.add(it.yt);}});
-  for(const it of byRecent){ if(out.length>=5)break; if(!seen.has(it.yt)){out.push(it.yt);seen.add(it.yt);} }
+let LIBRARY=childLibrary();
+
+/* ---------- THE DAY-SET ---------------------------------------------------
+   One shared source of truth for the whole day: what's been WATCHED and what's
+   been SKIPPED, scoped to the local calendar day. Rotation, the rainbow meter,
+   the deck's countdown and the closedown card all read from this, so they can
+   never disagree. Quiet reset at local midnight — no fanfare, same lifetime as
+   the rainbow day-set.
+   WATCHED = "playback actually started" (recorded in openPlayer when the iframe
+   loads, not when the modal opens). It's a SET keyed by video: a watch-again
+   does NOT re-add, so it never re-fills a rainbow segment or counts again toward
+   rotation or the day's N. The day-set is a set, not a counter.
+   localStorage is the store for THIS step. Watched-state GRADUATES TO D1 IN
+   STEP 4 alongside the back office — parent visibility of what she's watched
+   requires it. (Not "if a second device appears" — Step 4.)                  */
+function localDay(){const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;}
+function loadDay(){ let s=null; try{s=JSON.parse(store.get('pf-day')||'null')}catch(e){}
+  if(!s||s.day!==localDay()) s={day:localDay(),watched:[],skipped:[]};   // midnight rollover → fresh day-set
+  if(!Array.isArray(s.watched))s.watched=[]; if(!Array.isArray(s.skipped))s.skipped=[];
+  return s; }
+let DAY=loadDay();
+function saveDay(){ DAY.day=localDay(); store.set('pf-day',JSON.stringify(DAY)); }
+function rolloverDay(){ if(DAY.day!==localDay()) DAY=loadDay(); }   // in case the app was left open across midnight
+
+/* Deck size N: parent-configurable, default 5. A stored value NOW (localStorage,
+   alongside the parent gate); the full settings UI lands with the Step 4 back
+   office. Read here — never hardcoded. */
+function deckSize(){ const n=parseInt(store.get('pf-deck-n'),10); return (n>=1&&n<=12)?n:5; }
+function watchedIds(){ return new Set(DAY.watched.map(w=>w.yt)); }
+
+/* Rotation — the load-bearing balance mechanism (rotation, not scarcity):
+   max 2 consecutive plays from the same food group. After two in a row, that
+   group rests until a video from ANOTHER group has been watched. Skips don't
+   count as plays. Returns the currently-rested group key, or null. */
+function restedGroup(){ const w=DAY.watched; return (w.length>=2 && w[w.length-1].g===w[w.length-2].g) ? w[w.length-1].g : null; }
+
+/* Parent "pins": the ⭐ in the grown-up library forces specific videos to the
+   front of today's deck. Kept in 'pf-today'. Empty → pure recency + balance. */
+function pins(){ try{const a=JSON.parse(store.get('pf-today')||'[]'); return Array.isArray(a)?a:[];}catch(e){return [];} }
+
+function pickToday(lib){
+  rolloverDay();
+  const remaining=deckSize()-DAY.watched.length;
+  if(remaining<=0) return [];                                            // day's N plays reached → deck is spent
+  const watched=watchedIds(), skipped=new Set(DAY.skipped), rested=restedGroup();
+  const pool=[...lib]
+    .filter(it=>it.yt && !watched.has(it.yt) && !skipped.has(it.yt))     // watched items leave the deck; skipped sit out today
+    .filter(it=>it.g!==rested)                                          // rested group sits out until another group is watched
+    .sort((a,b)=>(b.added||0)-(a.added||0));                           // recency-first (seeds carry no timestamp → oldest)
+  const out=[], seen=new Set(), chans=new Set();
+  const take=it=>{ out.push(it.yt); seen.add(it.yt); if(it.channel) chans.add(it.channel); };
+  const eligible=it=> !seen.has(it.yt) && !(it.channel && chans.has(it.channel));   // channel-dedup across the deck
+  pins().forEach(id=>{ if(out.length>=remaining)return; const it=pool.find(x=>x.yt===id && eligible(x)); if(it)take(it); });   // 1) parent pins first
+  Object.keys(GROUPS).forEach(g=>{ if(out.length>=remaining)return; const it=pool.find(x=>x.g===g && eligible(x)); if(it)take(it); }); // 2) one per group (balance)
+  for(const it of pool){ if(out.length>=remaining)break; if(eligible(it))take(it); }                                          // 3) top up by recency
   return out;
 }
-let LIBRARY=childLibrary();
-let TODAY=(()=>{ let saved=null; try{saved=JSON.parse(store.get('pf-today')||'null')}catch(e){}
-  const ids=(saved&&saved.length?saved:pickToday(LIBRARY)).filter(id=>LIBRARY.some(it=>it.yt===id));
-  return (ids.length?ids:pickToday(LIBRARY)).map(id=>LIBRARY.findIndex(it=>it.yt===id)).filter(i=>i>-1);
-})();
 
 /* theme + mode */
 const root=document.documentElement;
@@ -652,25 +719,61 @@ iconPicker.onchange=()=>{const f=iconPicker.files[0]; if(!f||!pendingTab) return
   r.readAsDataURL(f); iconPicker.value='';};
 
 /* HOME deck */
-const deckEl=document.getElementById('deck'), progEl=document.getElementById('progress'); let doneSet=new Set();
+const deckEl=document.getElementById('deck'), progEl=document.getElementById('progress');
+
+/* WATCHED = playback actually started. A watch-again is a no-op here (the day-set
+   is a set, not a counter): it never re-adds, so rotation, the rainbow and the
+   day's count all stay honest across watch-agains and across every surface. */
+function markWatched(it){
+  if(!it||!it.yt) return;
+  rolloverDay();
+  if(DAY.watched.some(w=>w.yt===it.yt)) return;        // already watched today → don't re-count, don't re-fill the rainbow
+  DAY.watched.push({yt:it.yt,g:it.g}); saveDay();
+  renderDeck(); checkDone(); renderRainbow(); buildWatch();
+}
+/* SKIP = skip-refill: the next eligible candidate takes the slot today. Skips
+   don't count as plays, so repeated skipping is effectively a "next" button —
+   at ~45 videos this self-limits (the pool runs dry) so we ship it as-is.
+   WATCH-POINT: if skipping becomes browsing in practice, the fix is to move a
+   skipped item to TOMORROW's candidate pool instead of revealing the next one
+   today. */
+function skipCard(it){
+  if(!it||!it.yt) return;
+  rolloverDay();
+  if(!DAY.skipped.includes(it.yt)){ DAY.skipped.push(it.yt); saveDay(); }
+  renderDeck(); checkDone();
+}
 function renderDeck(){
+  rolloverDay();
   deckEl.innerHTML=''; progEl.innerHTML='';
-  TODAY.forEach((idx,i)=>{
-    const it=LIBRARY[idx], grp=GROUPS[it.g];
-    const dot=document.createElement('i'); if(doneSet.has(idx)) dot.classList.add('done'); progEl.appendChild(dot);
+  const n=deckSize(), deck=pickToday(LIBRARY), watched=DAY.watched.length;
+  for(let i=0;i<n;i++){ const dot=document.createElement('i'); if(i<watched) dot.classList.add('done'); progEl.appendChild(dot); }
+  const lastProgramme=(n-watched)===1;                 // the final programme of the day — flag it diegetically
+  deck.forEach((yt,i)=>{
+    const it=LIBRARY.find(x=>x.yt===yt); if(!it) return; const grp=GROUPS[it.g]||GROUPS.watch;
     const inner=it.yt?`<img class="ytthumb" src="${thumbURL(it.yt)}" alt="" /><span class="playbadge">▶</span>`:it.e;
-    const card=document.createElement('div'); card.className='card'+(doneSet.has(idx)?' done':''); card.style.animationDelay=(i*60)+'ms';
-    card.innerHTML=`<div class="thumb i${(i%3)+1}" style="background:${it.yt?'#0B0A0C':grp.color}"><span class="tick">✓</span>${inner}</div>
-      <div class="meta"><span class="tag" style="background:${grp.color}">${grp.label}</span><h3>${it.t}</h3><p>${doneSet.has(idx)?'Watched':'Tap to play'}</p></div>`;
-    card.onclick=()=>{ if(it.yt) openPlayer(it); doneSet.add(idx); renderDeck(); checkDone(); };
+    const card=document.createElement('div'); card.className='card'; card.style.animationDelay=(i*60)+'ms';
+    const ribbon=(lastProgramme&&i===0)?`<span class="lastprog">Last programme today</span>`:'';
+    card.innerHTML=`<div class="thumb i${(i%3)+1}" style="background:${it.yt?'#0B0A0C':grp.color}">${inner}</div>
+      <div class="meta"><span class="tag" style="background:${grp.color}">${grp.label}</span><h3>${it.t}</h3><p>Tap to play</p>${ribbon}</div>
+      <button class="skip" title="Not now" aria-label="Skip this one">↷</button>`;
+    card.onclick=()=>{ if(it.yt) openPlayer(it); };     // watched is recorded when playback actually starts (openPlayer), not on tap
+    card.querySelector('.skip').onclick=e=>{ e.stopPropagation(); skipCard(it); };
     deckEl.appendChild(card);
   });
-  const left=TODAY.length-doneSet.size;
+  const left=n-watched;
   document.getElementById('picksLeft').textContent=left>0?`${left} to go. When they're done, they're done.`:`All done for today.`;
 }
-function checkDone(){const fin=doneSet.size>=TODAY.length; document.getElementById('doneState').classList.toggle('show',fin); deckEl.style.display=fin?'none':'block'; progEl.style.display=fin?'none':'flex';}
-function resetDeck(){doneSet=new Set(); renderDeck(); checkDone();}
-renderDeck();
+/* Day ends when N plays are reached OR the candidate pool is spent — either way
+   show the PIXFIX-VISION closedown rather than an abrupt stop. */
+function checkDone(){
+  rolloverDay();
+  const n=deckSize(), done=DAY.watched.length>=n || pickToday(LIBRARY).length===0;
+  document.getElementById('doneState').classList.toggle('show',done);
+  deckEl.style.display=done?'none':'block'; progEl.style.display=done?'none':'flex';
+}
+function resetDeck(){ const w=document.querySelector('#nav button[data-tab="watch"]'); if(w) w.click(); }  // to the Watch page — replays there don't re-count
+renderRainbow(); renderDeck(); checkDone();
 
 /* PLAYER */
 function openPlayer(it){
@@ -679,9 +782,27 @@ function openPlayer(it){
   f.innerHTML=`<div class="poster" id="poster"><img src="${thumbURL(it.yt)}" alt="" /><span class="pbug">PIXFIX-VISION</span><div class="pplay">▶</div></div>`;
   document.getElementById('poster').onclick=()=>{
     f.innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/${it.yt}?rel=0&playsinline=1&autoplay=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+    markWatched(it);   // playback ACTUALLY started — this, from any surface, is what "watched" means (Rider 4)
   };
   document.getElementById('player').classList.add('show');}
 function closePlayer(){document.getElementById('player').classList.remove('show'); document.getElementById('pframe').innerHTML='';}
+
+/* RAINBOW METER — day-scoped, five food groups, one segment each. A segment
+   fills when a video of that group has been WATCHED today. It shares the day-set
+   with the deck + rotation, so meter and rotation can never disagree. Fixed
+   mechanic, theme-skinned sticker; no points, no streaks, no loss. A small
+   sticker lands when all five fill. Resets with the day-set at local midnight. */
+function renderRainbow(){
+  const rainbowEl=document.getElementById('rainbow');
+  if(!rainbowEl) return;
+  rolloverDay();
+  const filled=new Set(DAY.watched.map(w=>w.g)), keys=Object.keys(GROUPS);
+  const segs=keys.map(g=>{const on=filled.has(g);
+    return `<span class="seg${on?' on':''}" style="${on?`background:${GROUPS[g].color}`:''}" title="${GROUPS[g].label}"></span>`;}).join('');
+  const complete=keys.every(g=>filled.has(g));
+  rainbowEl.innerHTML=`<div class="rbtrack">${segs}</div>`+(complete?`<span class="rbsticker">🌈 Full rainbow today!</span>`:'');
+  rainbowEl.classList.toggle('full',complete);
+}
 
 /* WATCH */
 const wg=document.getElementById('watchGrid');
@@ -689,16 +810,30 @@ function tileFor(it){const grp=GROUPS[it.g]||GROUPS.watch;
   const art=it.yt?`<div class="art" style="background:#0B0A0C"><img class="ytthumb" src="${thumbURL(it.yt)}" alt="" /><span class="playbadge">▶</span></div>`:`<div class="art" style="background:${grp.color}">${it.e||''}</div>`;
   const tile=document.createElement('div'); tile.className='tile'; tile.innerHTML=art+`<span class="tag" style="background:${grp.color}">${grp.label}</span><h4>${it.t}</h4>`;
   tile.onclick=()=>{ if(it.yt) openPlayer(it); }; return tile;}
+function watchSection(title,items){
+  const h=document.createElement('h2'); h.className='wsec-h'; h.textContent=title; wg.appendChild(h);
+  const g=document.createElement('div'); g.className='grid'; items.forEach(it=>g.appendChild(tileFor(it))); wg.appendChild(g); return g;
+}
 function buildWatch(){
+  rolloverDay();
   wg.innerHTML='';
-  LIBRARY.forEach(it=>wg.appendChild(tileFor(it)));
+  /* Watched shelf — what's been played today, kept in view (never removed) so a
+     child can happily re-watch. A replay doesn't re-count (see markWatched). The
+     shelf is day-scoped for now; an all-time watched history lands with D1 in
+     Step 4, when parent visibility of what she's watched needs it. */
+  const watchedList=DAY.watched.map(w=>LIBRARY.find(x=>x.yt===w.yt)).filter(Boolean);
+  if(watchedList.length) watchSection('✓ Watched today',watchedList);
+  /* The library, grouped by food group. */
+  Object.keys(GROUPS).forEach(gk=>{ const items=LIBRARY.filter(it=>it.g===gk); if(items.length) watchSection(GROUPS[gk].label,items); });
+  if(!LIBRARY.length){ const p=document.createElement('p'); p.className='sub'; p.textContent='Nothing here yet.'; wg.appendChild(p); }
+  /* Retired items stay reachable under "More things". */
   const arch=archivedItems();
   if(arch.length){
     const more=document.createElement('button'); more.className='morebtn'; more.textContent='More things ▾';
     const box=document.createElement('div'); box.className='grid'; box.style.display='none'; box.style.marginTop='12px';
     arch.forEach(it=>box.appendChild(tileFor(it)));
     more.onclick=()=>{const open=box.style.display==='none'; box.style.display=open?'grid':'none'; more.textContent=open?'Fewer ▴':'More things ▾';};
-    wg.after(more,box);
+    wg.appendChild(more); wg.appendChild(box);
   }
 }
 buildWatch();
@@ -1468,6 +1603,14 @@ window.addEventListener('resize',()=>{ if(document.getElementById('draw').classL
   .pf-ta{width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:11px;padding:12px;border-radius:14px;border:1.5px solid var(--glass-brd);background:var(--glass);color:var(--ink);box-sizing:border-box;}
   .pf-soon{opacity:.55;pointer-events:none;}
   .pf-ok{color:var(--move);font-weight:700;font-size:13px;min-height:18px;margin-top:6px;}
+  .mig-list{display:flex;flex-direction:column;gap:8px;margin:6px 0 12px;max-height:300px;overflow:auto;}
+  .mig-row{display:flex;align-items:center;gap:10px;}
+  .mig-row img{width:52px;height:34px;object-fit:cover;border-radius:7px;flex:none;background:#0B0A0C;}
+  .mig-meta{flex:1;min-width:0;} .mig-meta h4{margin:0;font-family:var(--disp);font-weight:700;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mig-meta code{font-size:11px;color:var(--ink-soft);}
+  .mig-b{font-family:var(--disp);font-weight:800;font-size:9px;letter-spacing:.4px;text-transform:uppercase;padding:3px 8px;border-radius:99px;flex:none;color:#fff;}
+  .mig-b.push{background:var(--move);} .mig-b.skip{background:var(--ink-soft);}
+  .mig-push{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;}
 `; document.head.appendChild(s);})();
 
 /* ---- video-id parsing (youtu.be, watch?v=, /shorts/, /embed/, bare id) ---- */
@@ -1485,14 +1628,12 @@ function setTuneActive(name,on){let a=activeTunes(); if(on){if(!a.includes(name)
 
 /* ---- deck + global refresh ---- */
 function refreshAll(){
+  rolloverDay();
   LIBRARY=childLibrary();
-  let ids; try{ids=JSON.parse(store.get('pf-today')||'null')}catch(e){ids=null}
-  ids=(ids&&ids.length?ids:pickToday(LIBRARY)).filter(id=>LIBRARY.some(it=>it.yt===id));
-  if(!ids.length) ids=pickToday(LIBRARY);
-  store.set('pf-today',JSON.stringify(ids));
-  TODAY=ids.map(id=>LIBRARY.findIndex(it=>it.yt===id)).filter(i=>i>-1);
-  doneSet=new Set();
-  renderDeck(); checkDone(); buildWatch(); renderSearch(si.value||'');
+  const have=new Set(LIBRARY.map(it=>it.yt));
+  store.set('pf-today',JSON.stringify(pins().filter(id=>have.has(id))));   // drop pins whose video is gone
+  DAY.skipped=DAY.skipped.filter(id=>have.has(id)); saveDay();             // drop stale skips
+  renderRainbow(); renderDeck(); checkDone(); buildWatch(); renderSearch(si.value||'');
   if(document.getElementById('pfManager')) renderManager();
 }
 window.refreshAll=refreshAll;   // let syncLibrary() re-render once the D1 library arrives
@@ -1535,12 +1676,12 @@ sheet.innerHTML=`
         <p class="pf-note" style="margin:0;">What you add lives on <b>this iPad only</b> for now — visit <b>Backup</b> now and then to save a copy. To pin the iPad to Pixfix during a session, triple-click the side button for <b>Guided Access</b>.</p></div>
     </div>
     <div class="pf-view" id="pfAdd">
-      <p class="pf-note">Answer what fits, tap <b>Search on YouTube</b>, and when you find something good, copy its link and paste it back into that question's box. Each video is filed automatically by its food group. Nothing reaches your child until you tap Add.</p>
+      <p class="pf-note">Answer what fits, tap <b>Search on YouTube</b>, and when you find something good, copy its link and paste it back into that question's box. Links you send here go to the <b>approval queue</b> — a grown-up okays them (and sets the food group) before they reach your child. To add something instantly, share it to Pixfix from YouTube's share sheet.</p>
       <div id="pfPrompts"></div>
       <p class="pf-ok" id="pfAddOk"></p>
     </div>
     <div class="pf-view" id="pfLib">
-      <p class="pf-note">Everything currently in the app. Tap ⭐ to put something in today's five-card deck, 🗄️ to move it to Previous (kept, out of rotation), 🗑️ to remove a video you added.</p>
+      <p class="pf-note">Everything currently in the app. Tap ⭐ to pin something to the front of today's deck, 🗄️ to move it to Previous (kept, out of rotation), 🗑️ to remove a video you added.</p>
       <div style="display:flex;gap:8px;margin-bottom:14px;"><button class="pf-mini ghost" id="pfRebuild">↻ Rebuild today's deck</button></div>
       <div id="pfManager"></div>
     </div>
@@ -1553,7 +1694,14 @@ sheet.innerHTML=`
       <div id="pfArchList"></div>
     </div>
     <div class="pf-view" id="pfBack">
-      <p class="pf-note">Videos you add live on this iPad. Use <b>Export</b> to back them up, <b>Import</b> to restore, or <b>Copy as SEED</b> to hand Giles a block to paste into <code>index.html</code> so the picks ship with the app on every device.</p>
+      <div class="pf-q" id="pfMigrateBox" style="margin-bottom:22px;">
+        <div class="qh"><span class="badge" style="background:var(--accent)">Move library to the cloud</span></div>
+        <label>Sync this iPad's added videos to the shared library</label>
+        <p class="pf-note" style="margin:0 0 10px;">Videos added on this iPad currently live only here. This checks each one against the shared cloud library and shows exactly what would be pushed — <b>nothing is sent until you tap Push</b>, and the parent token you enter is used for that one sync only, never saved.</p>
+        <button class="pf-mini" id="pfMigrateCheck">Check what needs syncing</button>
+        <div id="pfMigrateReport"></div>
+      </div>
+      <p class="pf-note">Local backup of anything still held on this iPad. Use <b>Export</b> to save a copy, <b>Import</b> to restore, or <b>Copy as SEED</b> to hand Giles a block to paste into <code>index.html</code>.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="pf-mini" id="pfExport">⬆︎ Export</button>
         <button class="pf-mini ghost" id="pfSeed">＜／＞ Copy as SEED</button>
@@ -1605,16 +1753,32 @@ sheet.querySelectorAll('.pf-parse').forEach(b=>b.onclick=()=>{const pi=+b.datase
     if(dup){row.style.opacity='.5'; row.querySelector('input').value='Already in the library'; }
     row.dataset.id=id; row.querySelector('.rm').onclick=()=>row.remove(); if(!dup)n++;
     stage.appendChild(row);});
-  const commit=document.createElement('button'); commit.className='pf-mini'; commit.style.marginTop='4px'; commit.textContent=`✓ Add ${n} to Pixfix`;
-  commit.onclick=()=>{const live=loadLive(); let added=0;
-    stage.querySelectorAll('.pf-chip').forEach(ch=>{const id=ch.dataset.id; const inp=ch.querySelector('input'); if(inp.disabled)return;
-      if(allItems().some(it=>it.yt===id))return;
-      const item={t:(inp.value||promptFor(pi)).trim(),g:p.g,yt:id,src:'parent',added:Date.now()}; if(p.page)item.page=p.page;
-      live.push(item); added++;});
-    saveLive(live); ta.value=''; stage.innerHTML='';
-    if(added) store.set('pf-today',JSON.stringify(pickToday(childLibrary())));   // rebuild today's deck so new videos reach the home screen
-    const ok=sheet.querySelector('#pfAddOk'); ok.textContent=`Added ${added} video${added===1?'':'s'} — Gabriela can see ${added===1?'it':'them'} now.`; setTimeout(()=>ok.textContent='',3500);
-    refreshAll();};
+  const commit=document.createElement('button'); commit.className='pf-mini'; commit.style.marginTop='4px'; commit.textContent=`✓ Send ${n} for approval`;
+  /* The in-app add form posts TOKENLESS → the Worker files each link in the D1
+     pending queue (child trust). Approval + food-group categorisation happen in
+     the Step 4 back office. No parent token ever lives on this device: parent-trust
+     adds (instant-approved) go via the iOS share sheet instead. This is the gate
+     moving from "who's adding" to "library entry" — everything new is reviewed. */
+  commit.onclick=async()=>{
+    const ok=sheet.querySelector('#pfAddOk');
+    const rows=[...stage.querySelectorAll('.pf-chip')].filter(ch=>!ch.querySelector('input').disabled);
+    if(!rows.length){ ok.textContent='Nothing new to send.'; setTimeout(()=>ok.textContent='',3000); return; }
+    commit.disabled=true; commit.textContent='Sending…';
+    let queued=0,exists=0,failed=0;
+    for(const ch of rows){ const id=ch.dataset.id;
+      try{
+        const r=await fetch(API_BASE+'/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://youtu.be/'+id})});
+        const d=await r.json().catch(()=>({}));
+        if(d.status==='pending'||d.status==='added') queued++;
+        else if(d.status==='exists') exists++;
+        else failed++;
+      }catch(e){ failed++; }
+    }
+    ta.value=''; stage.innerHTML=''; commit.disabled=false;
+    const parts=[]; if(queued)parts.push(`Sent ${queued} for a grown-up to approve`); if(exists)parts.push(`${exists} already in the library`); if(failed)parts.push(`${failed} couldn't be sent — check the connection`);
+    ok.textContent=(parts.join(' · ')||'Nothing sent')+'.'; setTimeout(()=>ok.textContent='',6000);
+    syncLibrary(); refreshAll();
+  };
   stage.appendChild(commit);
 });
 
@@ -1626,7 +1790,7 @@ function itemRow(it,ctx){const grp=GROUPS[it.g]||GROUPS.watch; const inDeck=(()=
     <div class="tags"><span class="t" style="background:${grp.color}">${grp.label}</span>${pageTag}<span class="t" style="background:transparent;color:var(--ink-soft);padding-left:0;">${it.src==='seed'?'built-in':'added'}</span></div></div>`;
   const acts=document.createElement('div'); acts.style.display='flex'; acts.style.gap='2px';
   if(ctx==='lib'){
-    const star=document.createElement('button'); star.className='act'; star.textContent=inDeck?'⭐':'☆'; star.title="In today's deck";
+    const star=document.createElement('button'); star.className='act'; star.textContent=inDeck?'⭐':'☆'; star.title="Pin to the front of today's deck";
     star.onclick=()=>{let ids;try{ids=JSON.parse(store.get('pf-today')||'[]')}catch(e){ids=[]}
       if(ids.includes(it.yt))ids=ids.filter(x=>x!==it.yt); else ids.push(it.yt);
       store.set('pf-today',JSON.stringify(ids)); refreshAll();};
@@ -1649,7 +1813,60 @@ function renderManager(){const box=sheet.querySelector('#pfManager'); if(!box)re
   const al=sheet.querySelector('#pfArchList'); al.innerHTML=''; const arch=archivedItems();
   if(!arch.length){al.innerHTML='<p class="pf-note">Nothing retired yet.</p>';} arch.forEach(it=>al.appendChild(itemRow(it,'arch')));
 }
-sheet.querySelector('#pfRebuild').onclick=()=>{store.set('pf-today',JSON.stringify(pickToday(childLibrary()))); refreshAll();};
+sheet.querySelector('#pfRebuild').onclick=()=>{ store.set('pf-today','[]'); DAY.skipped=[]; saveDay(); refreshAll(); };  // clear pins + today's skips → fresh derivation
+
+/* one-time migration: push this iPad's added videos (pf-lib) up to the shared D1
+   library. Dry-run first (renders on-screen — no dev console on the iPad); the
+   real push is the second tap. Existing entries migrate as APPROVED with their
+   food group preserved (they're an already-curated library, not new pending
+   submissions). The parent token is entered once for the sync and never stored. */
+function migrateRows(){
+  const remote=new Set(REMOTE.map(it=>it.yt)); const seen=new Set(); const rows=[];
+  loadLive().forEach(it=>{
+    if(!it.yt||!/^[A-Za-z0-9_-]{11}$/.test(it.yt)||seen.has(it.yt)) return; seen.add(it.yt);
+    if(it.src==='seed') return;                          // seed overrides aren't hers to push (already in D1)
+    let status = remote.has(it.yt) ? 'skip-exists' : it.archived ? 'skip-archived' : 'push';
+    rows.push({yt:it.yt, t:it.t||it.yt, g:it.g, status});
+  });
+  return rows;
+}
+function removeFromLive(yt){ saveLive(loadLive().filter(x=>!(x.yt===yt && x.src!=='seed' && !x.archived))); }
+function renderMigrateReport(msg){
+  const box=sheet.querySelector('#pfMigrateReport'); if(!box) return;
+  const rows=migrateRows(), toPush=rows.filter(r=>r.status==='push');
+  if(!rows.length){ box.innerHTML='<p class="pf-note" style="margin:12px 0 0;">Nothing added on this iPad to sync — the shared library is already the source.</p>'+(msg?`<p class="pf-ok">${msg}</p>`:''); return; }
+  const list=rows.map(r=>{
+    const b = r.status==='push' ? '<span class="mig-b push">will push</span>'
+            : r.status==='skip-exists' ? '<span class="mig-b skip">already in cloud</span>'
+            : '<span class="mig-b skip">retired — kept local</span>';
+    return `<div class="mig-row"><img src="${thumbURL(r.yt)}" alt="" /><div class="mig-meta"><h4>${r.t}</h4><code>${r.yt}</code> · ${(GROUPS[r.g]||GROUPS.watch).label}</div>${b}</div>`;
+  }).join('');
+  const push = toPush.length ? `<div class="mig-push"><input type="password" id="pfMigrateToken" class="pf-in" placeholder="Parent token — used once, never saved" autocomplete="off" /><button class="pf-mini" id="pfMigratePush">⬆︎ Push ${toPush.length} now</button></div>` : '';
+  box.innerHTML=`<p class="pf-note" style="margin:12px 0 6px;"><b>${toPush.length}</b> to push · ${rows.length-toPush.length} skipped.</p><div class="mig-list">${list}</div>${push}`+(msg?`<p class="pf-ok" style="margin-top:8px;">${msg}</p>`:'');
+  const pb=sheet.querySelector('#pfMigratePush'); if(pb) pb.onclick=pushMigration;
+}
+async function pushMigration(){
+  const rows=migrateRows().filter(r=>r.status==='push'); if(!rows.length) return;
+  const field=sheet.querySelector('#pfMigrateToken'); const token=(field&&field.value||'').trim();
+  if(!token){ if(field) field.focus(); renderMigrateReport('Enter the parent token first.'); return; }
+  const btn=sheet.querySelector('#pfMigratePush'); if(btn){ btn.disabled=true; btn.textContent='Pushing…'; }
+  let pushed=0, exists=0, failed=0;
+  for(const r of rows){
+    try{
+      const res=await fetch(API_BASE+'/share',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({url:'https://youtu.be/'+r.yt, token, food_group:r.g})});   // parent token → approved; food group preserved verbatim
+      const d=await res.json().catch(()=>({}));
+      if(d.status==='added'){ pushed++; removeFromLive(r.yt); }
+      else if(d.status==='exists'){ exists++; removeFromLive(r.yt); }
+      else failed++;
+    }catch(e){ failed++; }
+  }
+  if(field) field.value='';                              // token leaves the DOM; it was never written to storage
+  store.set('pf-lib-synced', String(Date.now()));        // pf-lib is retired as a write target once the library lives in D1
+  await syncLibrary(); refreshAll();
+  renderMigrateReport(`Done — pushed ${pushed}${exists?`, ${exists} already there`:''}${failed?`, ${failed} failed (tap Check, then Push, to retry)`:''}. These now live in the shared library and appear on every device.`);
+}
+sheet.querySelector('#pfMigrateCheck').onclick=()=>renderMigrateReport();
 
 /* backup */
 sheet.querySelector('#pfExport').onclick=()=>{const t=sheet.querySelector('#pfBackText'); t.value=JSON.stringify(loadLive(),null,2);

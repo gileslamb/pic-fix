@@ -8,6 +8,10 @@
      ANTHROPIC_API_KEY  categorisation (parent shares)
      PARENT_TOKEN       parent share sheet → auto-categorise → approved
      CHILD_TOKEN        child share → pending queue (categorise on approval, step 4)
+
+   Trust on POST /share: parent token → approved; child token OR no token → pending.
+   The in-app add form posts tokenless, so nothing puts a parent secret on the iPad —
+   everything a child adds in-app lands in the pending queue for grown-up approval.
 */
 
 const CORS = {
@@ -140,10 +144,25 @@ async function handleShare(request, env) {
   const bearer = auth.replace(/^Bearer\s+/i, '').trim();
   const token = bearer || body.token || url.searchParams.get('token') || '';
 
-  let trust = null;
+  let trust = null, tokenless = false;
   if (env.PARENT_TOKEN && token === env.PARENT_TOKEN) trust = 'parent';
   else if (env.CHILD_TOKEN && token === env.CHILD_TOKEN) trust = 'child';
-  if (!trust) return reply(request, url, { error: 'unauthorized', message: 'Bad or missing token.' }, 401);
+  else if (!token) { trust = 'child'; tokenless = true; } // the in-app add form → pending queue; no parent token ever lives on-device
+  // A present-but-wrong token is still rejected — absence means "untrusted client, queue me", not a failed auth.
+  if (!trust) return reply(request, url, { error: 'unauthorized', message: 'Bad token.' }, 401);
+
+  // Hardening for the tokenless path (a token is a shared secret and is exempt;
+  // iOS Shortcuts send no Origin). Browser adds must come from an allowed origin.
+  // Origin is spoofable by non-browser clients, so this pairs with the pending
+  // cap below — together they bound anonymous abuse. Permissive only if
+  // ALLOWED_ORIGINS is unset, so nothing breaks before it's configured.
+  if (tokenless) {
+    const origin = request.headers.get('Origin') || '';
+    const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (allowed.length && !allowed.includes(origin)) {
+      return reply(request, url, { error: 'forbidden_origin', message: 'Add videos from inside the Pixfix app.' }, 403);
+    }
+  }
 
   const shared = body.url || url.searchParams.get('url') || '';
   const ytId = parseYouTubeId(shared);
@@ -162,11 +181,26 @@ async function handleShare(request, env) {
     });
   }
 
+  // Pending cap — bound the approval queue so an abuser (or a runaway client)
+  // can't flood D1. Only gates NEW pending inserts; approved adds and 'exists'
+  // replies above are unaffected. Default 200, override with env PENDING_CAP.
+  if (trust === 'child') {
+    const cap = parseInt(env.PENDING_CAP || '200', 10);
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM videos WHERE status = 'pending'").first();
+    if ((row?.n ?? 0) >= cap) {
+      return reply(request, url, { error: 'queue_full', message: 'The approval queue is full — ask a grown-up to review it.' }, 429);
+    }
+  }
+
   const { title, channel } = await fetchOEmbed(ytId);
   const t = nowSecs();
 
   if (trust === 'parent') {
-    const food_group = await categorise(env, { title, channel }); // null on any failure
+    // A supplied, valid food_group is preserved verbatim — this is how the one-time
+    // pf-lib → D1 migration carries Gabriella's existing curation across intact rather
+    // than re-rolling it through the categoriser. Absent/invalid → auto-categorise.
+    const supplied = GROUP_KEYS.includes(body.food_group) ? body.food_group : null;
+    const food_group = supplied || (await categorise(env, { title, channel })); // null on any failure
     await env.DB.prepare(
       `INSERT INTO videos (yt_id, title, channel, food_group, status, added_by, added_at, approved_at)
        VALUES (?, ?, ?, ?, 'approved', 'parent', ?, ?)`

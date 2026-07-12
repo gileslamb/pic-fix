@@ -3,6 +3,18 @@ main = "src/index.js"
 compatibility_date = "2026-07-11"
 account_id = "90522b3dad0012adb50674261bd43351"
 
+[vars]
+# Max videos allowed in the pending approval queue at once (bounds tokenless abuse).
+PENDING_CAP = "200"
+
+# ALLOWED_ORIGINS is a SECRET, not a var — kept out of git and rotatable without a
+# code redeploy. Tokenless (in-app add form) submissions must come from one of these
+# origins (comma-separated, NO trailing slash); a bearer/child token is exempt.
+# Until it's set the origin check is permissive (the pending cap still applies).
+# Activate with:
+#   cd worker && npx wrangler secret put ALLOWED_ORIGINS
+#   # paste e.g.  https://your-app-origin,http://localhost:8090
+
 [[d1_databases]]
 binding = "DB"
 database_name = "pixfix"
