@@ -46,7 +46,9 @@ function reply(request, url, obj, status = 200) {
 const GROUP_KEYS = ['make', 'learn', 'move', 'watch', 'wind'];
 const GROUP_LABELS = { make: 'Make', learn: 'Learn', move: 'Move', watch: 'Watch together', wind: 'Wind-down' };
 
-/* Map a D1 row to the shape the app already consumes (SEED item shape). */
+/* Map a D1 row to the shape the app already consumes (SEED item shape). Carries
+   status so the app can bucket approved vs archived (archived shows under "More
+   things", never in the deck). */
 const toItem = (r) => ({
   t: r.title,
   g: r.food_group,
@@ -54,6 +56,7 @@ const toItem = (r) => ({
   channel: r.channel || undefined,
   added: r.added_at || undefined,
   src: r.added_by || 'seed',
+  status: r.status || 'approved',
 });
 
 const nowSecs = () => Math.floor(Date.now() / 1000);
@@ -330,6 +333,45 @@ async function handleAdmin(request, env) {
     return json({ status: 'declined', yt_id: ytId });
   }
 
+  // Library management for APPROVED items (D1-authoritative, so it syncs across
+  // devices — the gap where nothing could leave the library). archive = retire but
+  // keep (still watchable under "More things"); restore = un-archive; remove =
+  // hard delete (a re-request later lands as fresh pending — remove ≠ decline).
+  if (sub === 'archive' && request.method === 'POST') {
+    const ytId = String(body.yt_id || ''); if (!ytId) return json({ error: 'bad_request', message: 'yt_id required.' }, 400);
+    await env.DB.prepare("UPDATE videos SET status = 'archived' WHERE yt_id = ?").bind(ytId).run();
+    return json({ status: 'archived', yt_id: ytId });
+  }
+  if (sub === 'restore' && request.method === 'POST') {
+    const ytId = String(body.yt_id || ''); if (!ytId) return json({ error: 'bad_request', message: 'yt_id required.' }, 400);
+    await env.DB.prepare("UPDATE videos SET status = 'approved', approved_at = ? WHERE yt_id = ?").bind(nowSecs(), ytId).run();
+    return json({ status: 'approved', yt_id: ytId });
+  }
+  if (sub === 'remove' && request.method === 'POST') {
+    const ytId = String(body.yt_id || ''); if (!ytId) return json({ error: 'bad_request', message: 'yt_id required.' }, 400);
+    await env.DB.prepare('DELETE FROM videos WHERE yt_id = ?').bind(ytId).run();
+    return json({ status: 'removed', yt_id: ytId });
+  }
+
+  // Deck size N — the one setting that must reach the child device (via /config).
+  if (sub === 'config' && request.method === 'POST') {
+    const n = parseInt(body.deck_n, 10);
+    if (!(n >= 1 && n <= 12)) return json({ error: 'bad_request', message: 'deck_n must be 1–12.' }, 400);
+    await env.DB.prepare("INSERT INTO config (key, value) VALUES ('deck_n', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(String(n)).run();
+    return json({ deck_n: n });
+  }
+
+  // Full library export — cheap insurance against a bad remove or a provider
+  // mishap (D1 has no undelete). Returns every video row for a manual/Claude-Code
+  // restore. This is the cloud library, not local device state.
+  if (sub === 'export' && request.method === 'GET') {
+    const { results } = await env.DB.prepare(
+      'SELECT yt_id, title, channel, food_group, status, added_by, added_at, approved_at FROM videos ORDER BY id'
+    ).all();
+    return json({ exported_at: nowSecs(), count: (results || []).length, videos: results || [] });
+  }
+
   return json({ error: 'not_found' }, 404);
 }
 
@@ -351,13 +393,22 @@ export default {
       }
 
       if (pathname === '/library' && request.method === 'GET') {
+        // approved + archived: the child app shows approved in the deck/groups and
+        // archived under "More things" (retired, still watchable — never deleted).
         const { results } = await env.DB.prepare(
-          `SELECT yt_id, title, channel, food_group, added_by, added_at
+          `SELECT yt_id, title, channel, food_group, added_by, added_at, status
              FROM videos
-            WHERE status = 'approved'
+            WHERE status IN ('approved','archived')
             ORDER BY COALESCE(added_at, 0) DESC, id DESC`
         ).all();
         return json((results || []).map(toItem));
+      }
+
+      // Settings that must reach the child device (deck size N). Unauthed read.
+      if (pathname === '/config' && request.method === 'GET') {
+        const row = await env.DB.prepare("SELECT value FROM config WHERE key = 'deck_n'").first();
+        const n = parseInt(row?.value, 10);
+        return json({ deck_n: (n >= 1 && n <= 12) ? n : 5 });
       }
 
       if (pathname === '/share' && request.method === 'POST') {

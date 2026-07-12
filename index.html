@@ -564,23 +564,22 @@ const thumbURL=id=>`https://img.youtube.com/vi/${id}/hqdefault.jpg`;
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
 /* ---------- LIBRARY ENGINE ------------------------------------------------
-   SEED  = ships inside the app. Survives any device, reinstall, cleared data.
-   LIVE  = what a grown-up added on THIS device (localStorage 'pf-lib').
-   Child-facing views read SEED + LIVE, deduped by video id, minus archived.
-   Export / "Copy as SEED" in the grown-ups panel bridges LIVE back into SEED
-   when Giles next edits this file — so device picks become durable.        */
+   D1 (behind the pixfix Worker) is the SOLE source of truth for the library as of
+   Step 4c. The old device-local LIVE layer ('pf-lib') is retired: adds go to D1
+   (pending via the app, approved via the share sheet / parent quick-add), and
+   archive / remove are D1-authoritative so they sync across every device.
+   SEED   = a tiny embedded fallback so a never-synced / offline cold start still
+            shows something. D1 was seeded from it, so online it's redundant.
+   REMOTE = the library from the Worker (GET /library → approved + archived), each
+            row carrying its status. Cached to localStorage so an offline PWA shows
+            the last-known library.                                              */
 const SEED=[
-  {t:"The Romans — History in a Nutshell",        g:"learn", yt:"SajyHgJTy3E", src:"seed"},
-  {t:"The Amazon Rainforest — World of the Wild", g:"watch", yt:"3uzucyoUe6Q", src:"seed"},
-  {t:"Paper butterfly — easy origami",            g:"make",  yt:"Pc50h4ZlQb8", src:"seed"},
-  {t:"Cosmic Kids Yoga — dance party",            g:"move",  yt:"23VdtT0vQUY", src:"seed"},
-  {t:"Dragons Love Tacos — read aloud",           g:"wind",  yt:"J7TY3D4mqL8", src:"seed"},
+  {t:"The Romans — History in a Nutshell",        g:"learn", yt:"SajyHgJTy3E", src:"seed", status:"approved"},
+  {t:"The Amazon Rainforest — World of the Wild", g:"watch", yt:"3uzucyoUe6Q", src:"seed", status:"approved"},
+  {t:"Paper butterfly — easy origami",            g:"make",  yt:"Pc50h4ZlQb8", src:"seed", status:"approved"},
+  {t:"Cosmic Kids Yoga — dance party",            g:"move",  yt:"23VdtT0vQUY", src:"seed", status:"approved"},
+  {t:"Dragons Love Tacos — read aloud",           g:"wind",  yt:"J7TY3D4mqL8", src:"seed", status:"approved"},
 ];
-function loadLive(){try{return JSON.parse(store.get('pf-lib')||'[]')}catch(e){return []}}
-function saveLive(a){store.set('pf-lib',JSON.stringify(a))}
-/* REMOTE = the approved library from the pixfix Worker (D1). Cached to localStorage
-   so a PWA opened offline still shows the last-known live library; if the Worker is
-   unreachable and there's no cache, the embedded SEED is the fallback.            */
 const API_BASE="https://pixfix.gileslamb.workers.dev";
 let REMOTE=(()=>{try{return JSON.parse(store.get('pf-remote')||'[]')}catch(e){return []}})();
 function saveRemote(a){REMOTE=Array.isArray(a)?a:[]; store.set('pf-remote',JSON.stringify(REMOTE));}
@@ -592,14 +591,24 @@ async function syncLibrary(){
     if(Array.isArray(data)){ saveRemote(data); if(window.refreshAll) refreshAll(); }
   }catch(e){ /* offline / Worker down — cached REMOTE + embedded SEED remain the fallback */ }
 }
-function allItems(){                       // seed + remote(D1) + live, deduped by id (later layer wins)
-  const m=new Map(); SEED.forEach(it=>m.set(it.yt,{...it}));
-  REMOTE.forEach(it=>m.set(it.yt,{...(m.get(it.yt)||{}),...it,src:it.src||'remote'}));
-  loadLive().forEach(it=>m.set(it.yt,{...(m.get(it.yt)||{}),...it,src:it.src||'parent'}));
-  return [...m.values()];
+/* Deck size N lives in D1 config so a parent dial on any device reaches her iPad.
+   We cache it locally (pf-deck-n) for a fast, offline-safe read in deckSize(). */
+async function syncConfig(){
+  try{
+    const r=await fetch(API_BASE+'/config',{cache:'no-store'});
+    if(!r.ok) throw 0; const d=await r.json();
+    const n=parseInt(d.deck_n,10); if(n>=1&&n<=12){ store.set('pf-deck-n',String(n)); if(window.refreshAll) refreshAll(); }
+  }catch(e){ /* offline — keep the cached pf-deck-n (default 5) */ }
 }
-function childLibrary(){return allItems().filter(it=>!it.archived)}
-function archivedItems(){return allItems().filter(it=>it.archived)}
+function allItems(){
+  // Once we've synced at least once, D1 (REMOTE) is authoritative — SEED must NOT
+  // be merged back in, or a removed/archived seed item would reappear. SEED is only
+  // the offline cold-start fallback for a device that has never reached the Worker.
+  if(REMOTE && REMOTE.length) return REMOTE.map(it=>({...it, src:it.src||'remote'}));
+  return SEED.map(it=>({...it}));
+}
+function childLibrary(){return allItems().filter(it=>it.status!=='archived')}
+function archivedItems(){return allItems().filter(it=>it.status==='archived')}
 let LIBRARY=childLibrary();
 
 /* ---------- THE DAY-SET ---------------------------------------------------
@@ -1721,6 +1730,7 @@ sheet.innerHTML=`
       <button class="pf-tab" data-v="guide">Start here</button>
       <button class="pf-tab" data-v="add">Add videos</button>
       <button class="pf-tab" data-v="lib">Library</button>
+      <button class="pf-tab" data-v="settings">Settings</button>
       <button class="pf-tab" data-v="tunes">Tunes</button>
       <button class="pf-tab" data-v="arch">Previous</button>
       <button class="pf-tab" data-v="back">Backup</button>
@@ -1741,7 +1751,7 @@ sheet.innerHTML=`
       <div class="pf-q"><label>Music &amp; drawing</label>
         <p class="pf-note" style="margin:0;">The <b>piano</b> page plays real beginner songs — choose which ones appear in the <b>Tunes</b> tab. The <b>drawing</b> page shows colouring patterns that match whatever theme your child has picked, so there's nothing to set there.</p></div>
       <div class="pf-q"><label>Keep it safe &amp; backed up</label>
-        <p class="pf-note" style="margin:0;">What you add lives on <b>this iPad only</b> for now — visit <b>Backup</b> now and then to save a copy. To pin the iPad to Pixfix during a session, triple-click the side button for <b>Guided Access</b>.</p></div>
+        <p class="pf-note" style="margin:0;">The library lives in the cloud and syncs across devices. Visit <b>Backup</b> now and then to export a JSON copy as insurance. To pin the iPad to Pixfix during a session, triple-click the side button for <b>Guided Access</b>.</p></div>
     </div>
     <div class="pf-view" id="pfAdd">
       <p class="pf-note">Answer what fits, tap <b>Search on YouTube</b>, and when you find something good, copy its link and paste it back into that question's box. Links you send here go to the <b>approval queue</b> — a grown-up okays them (and sets the food group) before they reach your child. To add something instantly, share it to Pixfix from YouTube's share sheet.</p>
@@ -1749,9 +1759,23 @@ sheet.innerHTML=`
       <p class="pf-ok" id="pfAddOk"></p>
     </div>
     <div class="pf-view" id="pfLib">
-      <p class="pf-note">Everything currently in the app. Tap ⭐ to pin something to the front of today's deck, 🗄️ to move it to Previous (kept, out of rotation), 🗑️ to remove a video you added.</p>
+      <div class="pf-q" style="margin-bottom:16px;">
+        <label>Add a video straight to the library</label>
+        <p class="pf-note" style="margin:0 0 9px;">Paste a YouTube link to add it as <b>approved</b> right away (auto-filed by food group). For the share sheet, share to Pixfix instead.</p>
+        <div class="row"><input class="pf-in" id="pfQuickUrl" type="url" inputmode="url" placeholder="https://youtu.be/…" /><button class="pf-mini" id="pfQuickAdd">Add</button></div>
+        <p class="pf-ok" id="pfQuickOk"></p>
+      </div>
+      <p class="pf-note">Everything in the library. Tap ⭐ to pin something to the front of today's deck, 🗄️ to retire it (kept, out of rotation, still under “More things”), 🗑️ to remove it for good.</p>
       <div style="display:flex;gap:8px;margin-bottom:14px;"><button class="pf-mini ghost" id="pfRebuild">↻ Rebuild today's deck</button></div>
       <div id="pfManager"></div>
+    </div>
+    <div class="pf-view" id="pfSettings">
+      <div class="pf-q">
+        <label>Deck size — how many a day</label>
+        <p class="pf-note" style="margin:0 0 12px;">How many videos make up the daily deck before the day ends with the PIXFIX-VISION closedown. This reaches every device.</p>
+        <div class="row" style="align-items:center;gap:14px;"><input type="range" id="pfDeckN" min="1" max="12" step="1" style="flex:1;accent-color:var(--accent);" /><span id="pfDeckNVal" style="font-family:var(--disp);font-weight:800;font-size:20px;min-width:24px;text-align:center;">5</span></div>
+        <p class="pf-ok" id="pfDeckNOk"></p>
+      </div>
     </div>
     <div class="pf-view" id="pfTunes">
       <p class="pf-note">Tick the piano songs you want on the Music page — handy for focusing on whatever they're learning this week. Play and Follow-the-lights work on any of them.</p>
@@ -1762,25 +1786,12 @@ sheet.innerHTML=`
       <div id="pfArchList"></div>
     </div>
     <div class="pf-view" id="pfBack">
-      <div class="pf-q" id="pfMigrateBox" style="margin-bottom:22px;">
-        <div class="qh"><span class="badge" style="background:var(--accent)">Move library to the cloud</span></div>
-        <label>Sync this iPad's added videos to the shared library</label>
-        <p class="pf-note" style="margin:0 0 10px;">Videos added on this iPad currently live only here. This checks each one against the shared cloud library and shows exactly what would be pushed — <b>nothing is sent until you tap Push</b>, and the parent token you enter is used for that one sync only, never saved.</p>
-        <button class="pf-mini" id="pfMigrateCheck">Check what needs syncing</button>
-        <div id="pfMigrateReport"></div>
-      </div>
-      <p class="pf-note">Local backup of anything still held on this iPad. Use <b>Export</b> to save a copy, <b>Import</b> to restore, or <b>Copy as SEED</b> to hand Giles a block to paste into <code>index.html</code>.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="pf-mini" id="pfExport">⬆︎ Export</button>
-        <button class="pf-mini ghost" id="pfSeed">＜／＞ Copy as SEED</button>
-        <button class="pf-mini ghost" id="pfImportBtn">⬇︎ Import</button>
-      </div>
-      <textarea class="pf-ta" id="pfBackText" placeholder="Export / SEED output appears here — or paste a backup then tap Import."></textarea>
-      <p class="pf-ok" id="pfBackOk"></p>
-      <div class="pf-q pf-soon" style="margin-top:22px;">
-        <div class="qh"><span class="badge" style="background:var(--ink-soft)">Phase B · later</span></div>
-        <label>Auto-find videos</label>
-        <p class="pf-note" style="margin:0;">A Cloudflare Worker holds the YouTube Data API key and searches with <code>safeSearch=strict</code> + <code>videoEmbeddable=true</code>. Results come back here as <b>candidates</b> with a tick to approve — same principle, nothing reaches your child un-approved. Wired once Phase A has run for a while.</p>
+      <div class="pf-q">
+        <label>Back up the library</label>
+        <p class="pf-note" style="margin:0 0 10px;">The library lives in the cloud (D1) and syncs across devices. This exports the whole thing as a JSON file — cheap insurance against a mistaken removal or a provider hiccup. Keep it somewhere safe; restoring is a quick job from the file.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"><button class="pf-mini" id="pfExport">⬇︎ Export library (JSON)</button></div>
+        <textarea class="pf-ta" id="pfBackText" placeholder="The exported JSON appears here to copy — a file is also downloaded."></textarea>
+        <p class="pf-ok" id="pfBackOk"></p>
       </div>
     </div>
   </div>`;
@@ -1862,19 +1873,23 @@ function itemRow(it,ctx){const grp=GROUPS[it.g]||GROUPS.watch; const inDeck=(()=
     star.onclick=()=>{let ids;try{ids=JSON.parse(store.get('pf-today')||'[]')}catch(e){ids=[]}
       if(ids.includes(it.yt))ids=ids.filter(x=>x!==it.yt); else ids.push(it.yt);
       store.set('pf-today',JSON.stringify(ids)); refreshAll();};
-    const arch=document.createElement('button'); arch.className='act'; arch.textContent='🗄️'; arch.title='Move to Previous';
-    arch.onclick=()=>{setArchived(it,true);};
-    acts.appendChild(star); acts.appendChild(arch);
-    if(it.src!=='seed'){const del=document.createElement('button'); del.className='act'; del.textContent='🗑️'; del.title='Remove';
-      del.onclick=()=>{saveLive(loadLive().filter(x=>x.yt!==it.yt)); refreshAll();}; acts.appendChild(del);}
+    const arch=document.createElement('button'); arch.className='act'; arch.textContent='🗄️'; arch.title='Retire (keep, out of rotation)';
+    arch.onclick=async()=>{ arch.disabled=true; if(!await adminAction('archive',it.yt)) arch.disabled=false; };
+    const del=document.createElement('button'); del.className='act'; del.textContent='🗑️'; del.title='Remove from the library';
+    del.onclick=async()=>{ if(!confirm(`Remove “${it.t}” from the library? This can't be undone — keep a JSON backup (Backup tab) as your safety net.`)) return; del.disabled=true; if(!await adminAction('remove',it.yt)) del.disabled=false; };
+    acts.appendChild(star); acts.appendChild(arch); acts.appendChild(del);
   } else {
     const back=document.createElement('button'); back.className='act'; back.textContent='♻️'; back.title='Bring back';
-    back.onclick=()=>{setArchived(it,false);}; acts.appendChild(back);
+    back.onclick=async()=>{ back.disabled=true; if(!await adminAction('restore',it.yt)) back.disabled=false; }; acts.appendChild(back);
   }
   row.appendChild(acts); return row;}
-function setArchived(it,val){const live=loadLive(); const i=live.findIndex(x=>x.yt===it.yt);
-  if(i>-1){live[i].archived=val;} else {live.push({...it,archived:val,src:it.src||'seed'});} // seed items get a live override row
-  saveLive(live); refreshAll();}
+/* Library management is now D1-authoritative (archive/restore/remove sync across
+   every device) via the parent-gated admin endpoints. */
+async function adminAction(path,yt){
+  try{ const r=await admin(path,{method:'POST',body:JSON.stringify({yt_id:yt})}); if(!r.ok) throw 0; }
+  catch(e){ alert('Couldn’t reach the library — check the connection and try again.'); return false; }
+  await syncLibrary(); refreshAll(); return true;
+}
 function renderManager(){const box=sheet.querySelector('#pfManager'); if(!box)return; box.innerHTML='';
   const items=childLibrary(); if(!items.length){box.innerHTML='<p class="pf-note">Nothing yet — add some videos.</p>';}
   items.forEach(it=>box.appendChild(itemRow(it,'lib')));
@@ -1883,71 +1898,60 @@ function renderManager(){const box=sheet.querySelector('#pfManager'); if(!box)re
 }
 sheet.querySelector('#pfRebuild').onclick=()=>{ store.set('pf-today','[]'); DAY.skipped=[]; saveDay(); refreshAll(); };  // clear pins + today's skips → fresh derivation
 
-/* one-time migration: push this iPad's added videos (pf-lib) up to the shared D1
-   library. Dry-run first (renders on-screen — no dev console on the iPad); the
-   real push is the second tap. Existing entries migrate as APPROVED with their
-   food group preserved (they're an already-curated library, not new pending
-   submissions). The parent token is entered once for the sync and never stored. */
-function migrateRows(){
-  const remote=new Set(REMOTE.map(it=>it.yt)); const seen=new Set(); const rows=[];
-  loadLive().forEach(it=>{
-    if(!it.yt||!/^[A-Za-z0-9_-]{11}$/.test(it.yt)||seen.has(it.yt)) return; seen.add(it.yt);
-    if(it.src==='seed') return;                          // seed overrides aren't hers to push (already in D1)
-    let status = remote.has(it.yt) ? 'skip-exists' : it.archived ? 'skip-archived' : 'push';
-    rows.push({yt:it.yt, t:it.t||it.yt, g:it.g, status});
-  });
-  return rows;
+/* backup — export the CLOUD library (D1) as JSON. Cheap insurance against a bad
+   remove or a provider mishap (D1 has no undelete); restore is a manual / Claude
+   Code job from this file. This exports the shared library, not device state. */
+async function exportLibrary(){
+  const ok=sheet.querySelector('#pfBackOk'), ta=sheet.querySelector('#pfBackText');
+  ok.textContent='Fetching the library…';
+  try{
+    const r=await admin('export'); if(!r.ok) throw 0; const data=await r.json();
+    const text=JSON.stringify(data,null,2); ta.value=text;
+    try{ const blob=new Blob([text],{type:'application/json'}); const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob); a.download='pixfix-library-backup.json'; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    }catch(e){ /* file download can be blocked in a standalone PWA — the textarea is the fallback */ }
+    ok.textContent=`Exported ${data.count} videos — saved as a file and shown below to copy somewhere safe.`;
+  }catch(e){ ok.textContent='Couldn’t reach the library — check the connection.'; }
 }
-function removeFromLive(yt){ saveLive(loadLive().filter(x=>!(x.yt===yt && x.src!=='seed' && !x.archived))); }
-function renderMigrateReport(msg){
-  const box=sheet.querySelector('#pfMigrateReport'); if(!box) return;
-  const rows=migrateRows(), toPush=rows.filter(r=>r.status==='push');
-  if(!rows.length){ box.innerHTML='<p class="pf-note" style="margin:12px 0 0;">Nothing added on this iPad to sync — the shared library is already the source.</p>'+(msg?`<p class="pf-ok">${msg}</p>`:''); return; }
-  const list=rows.map(r=>{
-    const b = r.status==='push' ? '<span class="mig-b push">will push</span>'
-            : r.status==='skip-exists' ? '<span class="mig-b skip">already in cloud</span>'
-            : '<span class="mig-b skip">retired — kept local</span>';
-    return `<div class="mig-row"><img src="${thumbURL(r.yt)}" alt="" /><div class="mig-meta"><h4>${r.t}</h4><code>${r.yt}</code> · ${(GROUPS[r.g]||GROUPS.watch).label}</div>${b}</div>`;
-  }).join('');
-  const push = toPush.length ? `<div class="mig-push"><input type="password" id="pfMigrateToken" class="pf-in" placeholder="Parent token — used once, never saved" autocomplete="off" /><button class="pf-mini" id="pfMigratePush">⬆︎ Push ${toPush.length} now</button></div>` : '';
-  box.innerHTML=`<p class="pf-note" style="margin:12px 0 6px;"><b>${toPush.length}</b> to push · ${rows.length-toPush.length} skipped.</p><div class="mig-list">${list}</div>${push}`+(msg?`<p class="pf-ok" style="margin-top:8px;">${msg}</p>`:'');
-  const pb=sheet.querySelector('#pfMigratePush'); if(pb) pb.onclick=pushMigration;
-}
-async function pushMigration(){
-  const rows=migrateRows().filter(r=>r.status==='push'); if(!rows.length) return;
-  const field=sheet.querySelector('#pfMigrateToken'); const token=(field&&field.value||'').trim();
-  if(!token){ if(field) field.focus(); renderMigrateReport('Enter the parent token first.'); return; }
-  const btn=sheet.querySelector('#pfMigratePush'); if(btn){ btn.disabled=true; btn.textContent='Pushing…'; }
-  let pushed=0, exists=0, failed=0;
-  for(const r of rows){
-    try{
-      const res=await fetch(API_BASE+'/share',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({url:'https://youtu.be/'+r.yt, token, food_group:r.g})});   // parent token → approved; food group preserved verbatim
-      const d=await res.json().catch(()=>({}));
-      if(d.status==='added'){ pushed++; removeFromLive(r.yt); }
-      else if(d.status==='exists'){ exists++; removeFromLive(r.yt); }
-      else failed++;
-    }catch(e){ failed++; }
-  }
-  if(field) field.value='';                              // token leaves the DOM; it was never written to storage
-  store.set('pf-lib-synced', String(Date.now()));        // pf-lib is retired as a write target once the library lives in D1
-  await syncLibrary(); refreshAll();
-  renderMigrateReport(`Done — pushed ${pushed}${exists?`, ${exists} already there`:''}${failed?`, ${failed} failed (tap Check, then Push, to retry)`:''}. These now live in the shared library and appear on every device.`);
-}
-sheet.querySelector('#pfMigrateCheck').onclick=()=>renderMigrateReport();
+sheet.querySelector('#pfExport').onclick=exportLibrary;
 
-/* backup */
-sheet.querySelector('#pfExport').onclick=()=>{const t=sheet.querySelector('#pfBackText'); t.value=JSON.stringify(loadLive(),null,2);
-  sheet.querySelector('#pfBackOk').textContent='Exported below — copy it somewhere safe.';};
-sheet.querySelector('#pfSeed').onclick=()=>{const t=sheet.querySelector('#pfBackText');
-  const rows=childLibrary().filter(it=>it.src!=='seed').map(it=>`  {t:${JSON.stringify(it.t)}, g:"${it.g}", yt:"${it.yt}", src:"seed"${it.page?`, page:"${it.page}"`:''}},`);
-  t.value=rows.length?rows.join('\n'):'// nothing device-added to promote yet';
-  sheet.querySelector('#pfBackOk').textContent='Paste these lines into the SEED array in index.html, then push.';};
-sheet.querySelector('#pfImportBtn').onclick=()=>{const t=sheet.querySelector('#pfBackText'); const ok=sheet.querySelector('#pfBackOk');
-  try{const data=JSON.parse(t.value); if(!Array.isArray(data))throw 0;
-    const clean=data.filter(x=>x&&/^[A-Za-z0-9_-]{11}$/.test(x.yt)&&GROUPS[x.g]);
-    saveLive(clean); ok.textContent=`Imported ${clean.length} videos.`; refreshAll();
-  }catch(e){ok.textContent="That doesn't look like a valid backup.";}};
+/* Parent quick-add: a URL straight into the approved library (uses this device's
+   stored parent token → /share parent path → approved + auto-categorised). */
+async function quickAdd(){
+  const inp=sheet.querySelector('#pfQuickUrl'), ok=sheet.querySelector('#pfQuickOk');
+  const url=(inp.value||'').trim(); if(!url){ inp.focus(); return; }
+  ok.textContent='Adding…';
+  try{
+    const r=await fetch(API_BASE+'/share',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+parentToken()},body:JSON.stringify({url})});
+    const d=await r.json().catch(()=>({}));
+    if(d.status==='added'||d.status==='approved'){ inp.value=''; ok.textContent=`Added${d.food_group?` to ${(GROUPS[d.food_group]||{}).label||d.food_group}`:''}.`; await syncLibrary(); refreshAll(); }
+    else if(d.status==='exists') ok.textContent='Already in the library.';
+    else ok.textContent=d.message||'That didn’t work — check the link.';
+  }catch(e){ ok.textContent='Couldn’t reach the library — check the connection.'; }
+  setTimeout(()=>{ if(ok) ok.textContent=''; },5000);
+}
+sheet.querySelector('#pfQuickAdd').onclick=quickAdd;
+sheet.querySelector('#pfQuickUrl').addEventListener('keydown',e=>{if(e.key==='Enter')quickAdd();});
+
+/* Settings — the deck-size N dial. N lives in D1 config so it reaches her device;
+   we read the cached value and write through /admin/config. */
+function renderSettings(){
+  const n=deckSize(); const el=sheet.querySelector('#pfDeckN'); const out=sheet.querySelector('#pfDeckNVal');
+  if(el){ el.value=n; } if(out){ out.textContent=n; }
+}
+(function(){ const el=sheet.querySelector('#pfDeckN'), out=sheet.querySelector('#pfDeckNVal'), ok=sheet.querySelector('#pfDeckNOk');
+  if(!el) return;
+  el.addEventListener('input',()=>{ if(out) out.textContent=el.value; });
+  el.addEventListener('change',async()=>{ const n=parseInt(el.value,10); if(!(n>=1&&n<=12)) return;
+    store.set('pf-deck-n',String(n)); refreshAll();                 // apply locally at once
+    if(ok) ok.textContent='Saving…';
+    try{ const r=await admin('config',{method:'POST',body:JSON.stringify({deck_n:n})}); if(!r.ok) throw 0;
+      if(ok) ok.textContent=`Saved — the deck now shows ${n} a day on every device.`;
+    }catch(e){ if(ok) ok.textContent='Saved on this device; couldn’t reach the server to sync others.'; }
+    setTimeout(()=>{ if(ok) ok.textContent=''; },4000);
+  });
+})();
 
 /* piano-tunes chooser */
 function renderTuneList(){const box=sheet.querySelector('#pfTuneList'); if(!box)return; box.innerHTML='';
@@ -1963,11 +1967,12 @@ function renderTuneList(){const box=sheet.querySelector('#pfTuneList'); if(!box)
 /* tab switching */
 sheet.querySelectorAll('.pf-tab').forEach(t=>t.onclick=()=>{
   sheet.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
-  const map={requests:'pfQueue',guide:'pfGuide',add:'pfAdd',lib:'pfLib',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
+  const map={requests:'pfQueue',guide:'pfGuide',add:'pfAdd',lib:'pfLib',settings:'pfSettings',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
   sheet.querySelectorAll('.pf-view').forEach(v=>v.classList.remove('on'));
   sheet.querySelector('#'+map[t.dataset.v]).classList.add('on');
   if(t.dataset.v==='requests') renderQueue();
   if(t.dataset.v==='lib'||t.dataset.v==='arch') renderManager();
+  if(t.dataset.v==='settings') renderSettings();
   if(t.dataset.v==='tunes') renderTuneList();
 });
 sheet.querySelector('#pfClose').onclick=()=>sheet.classList.remove('show');
@@ -2089,6 +2094,7 @@ refreshBadge();  // show any waiting-request count on the lock without opening i
 pollRequests();  // resolve her "You asked for" shelf (waiting / arrived / declined)
 setInterval(()=>{ refreshBadge(); pollRequests(); }, 60000);
 syncLibrary();   // pull the approved library from the pixfix Worker (D1); re-renders on arrival
+syncConfig();    // pull deck size N from D1 config so a parent dial on any device reaches this one
 </script>
 <script>
 /* register the service worker (harmless no-op where unsupported) */
