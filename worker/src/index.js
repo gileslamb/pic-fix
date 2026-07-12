@@ -168,11 +168,32 @@ async function handleShare(request, env) {
   const ytId = parseYouTubeId(shared);
   if (!ytId) return reply(request, url, { error: 'bad_url', message: "That doesn't look like a YouTube link." }, 400);
 
-  // Dedupe on yt_id — friendly, not an error.
+  // Dedupe on yt_id — friendly, not an error. BUT a PARENT share of an existing
+  // non-approved row APPROVES it in place: pending→approved and declined→approved.
+  // This is the interim release valve until the Step 4 back office — "parent
+  // re-shares it" becomes a one-tap approval. The reply states what actually
+  // happened so the parent's phone notification confirms the approval fired.
   const existing = await env.DB.prepare(
-    'SELECT yt_id, title, status FROM videos WHERE yt_id = ?'
+    'SELECT yt_id, title, channel, food_group, status FROM videos WHERE yt_id = ?'
   ).bind(ytId).first();
   if (existing) {
+    if (trust === 'parent' && existing.status !== 'approved') {
+      const was = existing.status; // 'pending' | 'declined'
+      const supplied = GROUP_KEYS.includes(body.food_group) ? body.food_group : null;
+      const food_group =
+        existing.food_group || supplied || (await categorise(env, { title: existing.title, channel: existing.channel }));
+      await env.DB.prepare(
+        "UPDATE videos SET status = 'approved', food_group = ?, approved_at = ? WHERE yt_id = ?"
+      ).bind(food_group, nowSecs(), ytId).run();
+      const name = existing.title || ytId;
+      return reply(request, url, {
+        status: 'approved',
+        yt_id: ytId,
+        title: existing.title,
+        food_group,
+        message: `Approved "${name}" (was ${was})${food_group ? ` — ${GROUP_LABELS[food_group]}` : ' — needs a food group'}.`,
+      });
+    }
     return reply(request, url, {
       status: 'exists',
       yt_id: ytId,
