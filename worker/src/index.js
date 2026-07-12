@@ -58,6 +58,16 @@ const toItem = (r) => ({
 
 const nowSecs = () => Math.floor(Date.now() / 1000);
 
+/* Bearer token off a request (header, then body, then ?token=). */
+function tokenOf(request, url, body) {
+  const bearer = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  return bearer || (body && body.token) || url.searchParams.get('token') || '';
+}
+/* True iff the request carries the parent token. Gates every /admin/* endpoint. */
+function isParent(request, url, body, env) {
+  return !!env.PARENT_TOKEN && tokenOf(request, url, body) === env.PARENT_TOKEN;
+}
+
 /* Pull an 11-char YouTube id from a share. Handles youtu.be, youtube.com/watch,
    /shorts, /live, /embed, m.youtube.com, and a bare id. */
 function parseYouTubeId(raw) {
@@ -135,7 +145,7 @@ async function categorise(env, { title, channel }) {
   }
 }
 
-async function handleShare(request, env) {
+async function handleShare(request, env, ctx) {
   // token: Authorization: Bearer <t>, else body.token, else ?token=
   const url = new URL(request.url);
   let body = {};
@@ -194,12 +204,18 @@ async function handleShare(request, env) {
         message: `Approved "${name}" (was ${was})${food_group ? ` — ${GROUP_LABELS[food_group]}` : ' — needs a food group'}.`,
       });
     }
-    return reply(request, url, {
-      status: 'exists',
-      yt_id: ytId,
-      title: existing.title,
-      message: `Already in the library — "${existing.title || ytId}".`,
-    });
+    // Non-parent re-request of an existing video. Decline is AUTHORITATIVE: a
+    // declined video is NOT resurrected into pending — only a parent act (the
+    // reshare-upgrade above, or the back office) can revive it. Copy keeps the app
+    // as the world and the parent as the gate ("a grown-up said…", never a scold).
+    const name = existing.title || ytId;
+    if (existing.status === 'declined') {
+      return reply(request, url, { status: 'declined', yt_id: ytId, title: existing.title, message: `A grown-up said not this one — "${name}".` });
+    }
+    if (existing.status === 'pending') {
+      return reply(request, url, { status: 'pending', yt_id: ytId, title: existing.title, message: `Already waiting for a grown-up — "${name}".` });
+    }
+    return reply(request, url, { status: 'exists', yt_id: ytId, title: existing.title, message: `Already in the library — "${name}".` });
   }
 
   // Pending cap — bound the approval queue so an abuser (or a runaway client)
@@ -233,11 +249,16 @@ async function handleShare(request, env) {
     return reply(request, url, { status: 'added', yt_id: ytId, title, channel, food_group, message });
   }
 
-  // child → pending; categorisation happens on approval (step 4)
+  // child → pending. Categorise in the BACKGROUND (ctx.waitUntil) so the submit
+  // returns immediately; the suggested food group lands in the row a moment later
+  // and shows pre-selected in the back-office queue, where the parent confirms or
+  // overrides it. (Was: categorise-on-approval — moved earlier so there's a real
+  // suggestion to approve, not a blank.)
   await env.DB.prepare(
     `INSERT INTO videos (yt_id, title, channel, food_group, status, added_by, added_at)
      VALUES (?, ?, ?, NULL, 'pending', 'child', ?)`
   ).bind(ytId, title, channel, t).run();
+  if (ctx && ctx.waitUntil) ctx.waitUntil(categoriseInBackground(env, ytId, title, channel));
   return reply(request, url, {
     status: 'pending',
     yt_id: ytId,
@@ -246,8 +267,71 @@ async function handleShare(request, env) {
   });
 }
 
+/* Fill a still-pending row's food group asynchronously (see the child path above).
+   Guarded so it never overrides a parent override or a row that's since been
+   approved/declined: only writes when the row is still pending AND uncategorised. */
+async function categoriseInBackground(env, ytId, title, channel) {
+  const food_group = await categorise(env, { title, channel });
+  if (!food_group) return;
+  await env.DB.prepare(
+    "UPDATE videos SET food_group = ? WHERE yt_id = ? AND status = 'pending' AND food_group IS NULL"
+  ).bind(food_group, ytId).run();
+}
+
+/* ---- the grown-up back office (all parent-token gated) ---- */
+async function handleAdmin(request, env) {
+  const url = new URL(request.url);
+  let body = {};
+  if (request.method === 'POST') { try { body = await request.json(); } catch { /* empty */ } }
+  if (!isParent(request, url, body, env)) {
+    return json({ error: 'unauthorized', message: 'Parent token required.' }, 401);
+  }
+  const sub = url.pathname.slice('/admin/'.length);
+
+  // Cheap credential check — the app calls this to validate a token on unlock.
+  if (sub === 'ping' && request.method === 'GET') return json({ ok: true });
+
+  // The queue: pending first (newest first), then declined (so nothing is silent).
+  if (sub === 'queue' && request.method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT yt_id, title, channel, food_group, status, added_by, added_at
+         FROM videos
+        WHERE status IN ('pending','declined')
+        ORDER BY (status = 'pending') DESC, COALESCE(added_at, 0) DESC, id DESC`
+    ).all();
+    return json((results || []).map((r) => ({
+      yt_id: r.yt_id, title: r.title, channel: r.channel,
+      food_group: r.food_group || null, status: r.status,
+      added_by: r.added_by, added_at: r.added_at || null,
+    })));
+  }
+
+  // Approve: parent override wins, else the stored suggestion, else categorise now.
+  if (sub === 'approve' && request.method === 'POST') {
+    const ytId = String(body.yt_id || '');
+    if (!ytId) return json({ error: 'bad_request', message: 'yt_id required.' }, 400);
+    const row = await env.DB.prepare('SELECT title, channel, food_group FROM videos WHERE yt_id = ?').bind(ytId).first();
+    if (!row) return json({ error: 'not_found' }, 404);
+    const override = GROUP_KEYS.includes(body.food_group) ? body.food_group : null;
+    const food_group = override || row.food_group || (await categorise(env, { title: row.title, channel: row.channel }));
+    await env.DB.prepare("UPDATE videos SET status = 'approved', food_group = ?, approved_at = ? WHERE yt_id = ?")
+      .bind(food_group, nowSecs(), ytId).run();
+    return json({ status: 'approved', yt_id: ytId, food_group });
+  }
+
+  // Decline is authoritative — the row stays declined until a parent revives it.
+  if (sub === 'decline' && request.method === 'POST') {
+    const ytId = String(body.yt_id || '');
+    if (!ytId) return json({ error: 'bad_request', message: 'yt_id required.' }, 400);
+    await env.DB.prepare("UPDATE videos SET status = 'declined' WHERE yt_id = ?").bind(ytId).run();
+    return json({ status: 'declined', yt_id: ytId });
+  }
+
+  return json({ error: 'not_found' }, 404);
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const { pathname } = url;
 
@@ -257,10 +341,10 @@ export default {
 
     try {
       if (pathname === '/health' && request.method === 'GET') {
-        const { results } = await env.DB.prepare(
-          "SELECT COUNT(*) AS n FROM videos WHERE status = 'approved'"
-        ).all();
-        return json({ ok: true, approved: results?.[0]?.n ?? 0 });
+        const row = await env.DB.prepare(
+          "SELECT SUM(status = 'approved') AS approved, SUM(status = 'pending') AS pending FROM videos"
+        ).first();
+        return json({ ok: true, approved: row?.approved ?? 0, pending: row?.pending ?? 0 });
       }
 
       if (pathname === '/library' && request.method === 'GET') {
@@ -274,7 +358,11 @@ export default {
       }
 
       if (pathname === '/share' && request.method === 'POST') {
-        return await handleShare(request, env);
+        return await handleShare(request, env, ctx);
+      }
+
+      if (pathname.startsWith('/admin/')) {
+        return await handleAdmin(request, env);
       }
 
       return json({ error: 'not_found' }, 404);

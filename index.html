@@ -306,7 +306,7 @@
 <div class="app">
   <div class="hero">
     <div class="hctl left"><button class="roundbtn" id="themeBtn" title="Themes">🎨</button><button class="roundbtn paint" id="paintBtn" title="Make it yours">✏️</button></div>
-    <div class="hctl right"><button class="roundbtn" id="modeBtn" title="Light / dark">🌙</button><button class="roundbtn" id="parentBtn" title="Grown-ups">🔒</button><div class="who"><span class="av">G</span> Gabriela</div></div>
+    <div class="hctl right"><button class="roundbtn" id="modeBtn" title="Light / dark">🌙</button><button class="roundbtn" id="parentBtn" title="Grown-ups">🔒<span class="parentbadge" id="parentBadge" hidden></span></button><div class="who"><span class="av">G</span> Gabriela</div></div>
     <img class="painting" id="heroImg" src="assets/pixfix-logo.png" alt="Gabriella's Pixfix" />
     <div class="heroFallback" id="heroFallback">Pix<b>fix</b></div>
   </div>
@@ -1577,6 +1577,21 @@ window.addEventListener('resize',()=>{ if(document.getElementById('draw').classL
   .pf-tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
   .pf-tab{font-family:var(--disp);font-weight:700;font-size:13px;padding:8px 15px;border-radius:99px;cursor:pointer;background:var(--glass);border:1.5px solid var(--glass-brd);color:var(--ink);}
   .pf-tab.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .qbadge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;font-weight:800;vertical-align:middle;}
+  .pf-tab.on .qbadge{background:#fff;color:var(--accent);}
+  .parentbadge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#FF5A5F;color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+  /* pending-queue rows */
+  .qrow{display:flex;gap:11px;align-items:flex-start;padding:11px;border-radius:16px;background:var(--glass);border:1.5px solid var(--glass-brd);margin-bottom:11px;}
+  .qrow.declined{opacity:.62;}
+  .qrow img{width:96px;height:60px;object-fit:cover;border-radius:10px;flex:none;background:#0B0A0C;}
+  .qrow .qmeta{flex:1;min-width:0;}
+  .qrow .qmeta h4{font-family:var(--disp);font-weight:700;font-size:14px;margin:0 0 2px;color:var(--ink);line-height:1.15;}
+  .qrow .qmeta .qch{font-size:11px;color:var(--ink-soft);font-weight:700;margin:0 0 8px;}
+  .qrow .qacts{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+  .qrow select.qfg{font-family:var(--body);font-weight:700;font-size:12px;padding:7px 9px;border-radius:12px;border:1.5px solid var(--glass-brd);background:var(--paper);color:var(--ink);}
+  .qbtn{font-family:var(--disp);font-weight:700;font-size:12px;padding:8px 13px;border-radius:12px;border:none;cursor:pointer;}
+  .qbtn.ok{background:var(--move);color:#fff;} .qbtn.no{background:var(--glass);border:1.5px solid var(--glass-brd);color:var(--ink-soft);}
+  .pf-subh{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--ink-soft);margin:18px 0 10px;text-transform:uppercase;letter-spacing:.5px;}
   .pf-view{display:none;} .pf-view.on{display:block;}
   .pf-q{background:var(--glass);border:1.5px solid var(--glass-brd);border-radius:20px;padding:15px;margin-bottom:14px;}
   .pf-q .qh{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
@@ -1654,14 +1669,19 @@ sheet.innerHTML=`
   <div class="pf-top"><h2>Grown-ups</h2><button class="pf-x" id="pfClose" aria-label="Close">✕</button></div>
   <div class="pf-body">
     <div class="pf-tabs">
-      <button class="pf-tab on" data-v="guide">Start here</button>
+      <button class="pf-tab on" data-v="requests">Requests<span class="qbadge" id="pfQBadge" hidden></span></button>
+      <button class="pf-tab" data-v="guide">Start here</button>
       <button class="pf-tab" data-v="add">Add videos</button>
       <button class="pf-tab" data-v="lib">Library</button>
       <button class="pf-tab" data-v="tunes">Tunes</button>
       <button class="pf-tab" data-v="arch">Previous</button>
       <button class="pf-tab" data-v="back">Backup</button>
     </div>
-    <div class="pf-view on" id="pfGuide">
+    <div class="pf-view on" id="pfQueue">
+      <p class="pf-note">Videos <b>Gabriela has asked for</b>. Tap <b>Approve</b> to add one to the library (the suggested food group is pre-picked — change it if you like), or <b>Decline</b>. A declined video stays declined; nothing is lost.</p>
+      <div id="pfQueueList"></div>
+    </div>
+    <div class="pf-view" id="pfGuide">
       <div class="pf-q"><label>What Pixfix is</label>
         <p class="pf-note" style="margin:0;">A calm, <b>finite</b> space — the opposite of an endless feed. Each day is a short deck of five things that <b>ends</b> when they're done. Everything in it is chosen by you.</p></div>
       <div class="pf-q"><label>The golden rule</label>
@@ -1895,13 +1915,65 @@ function renderTuneList(){const box=sheet.querySelector('#pfTuneList'); if(!box)
 /* tab switching */
 sheet.querySelectorAll('.pf-tab').forEach(t=>t.onclick=()=>{
   sheet.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
-  const map={guide:'pfGuide',add:'pfAdd',lib:'pfLib',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
+  const map={requests:'pfQueue',guide:'pfGuide',add:'pfAdd',lib:'pfLib',tunes:'pfTunes',arch:'pfArch',back:'pfBack'};
   sheet.querySelectorAll('.pf-view').forEach(v=>v.classList.remove('on'));
   sheet.querySelector('#'+map[t.dataset.v]).classList.add('on');
+  if(t.dataset.v==='requests') renderQueue();
   if(t.dataset.v==='lib'||t.dataset.v==='arch') renderManager();
   if(t.dataset.v==='tunes') renderTuneList();
 });
 sheet.querySelector('#pfClose').onclick=()=>sheet.classList.remove('show');
+
+/* ---- the pending queue (parent-gated back office) ---- */
+function parentToken(){ return store.get('pf-parent-token')||''; }
+function setParentToken(t){ if(t) store.set('pf-parent-token',t); }
+function clearParentToken(){ try{localStorage.removeItem('pf-parent-token')}catch(e){} }
+async function admin(path,opts){ opts=opts||{};
+  return fetch(API_BASE+'/admin/'+path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+parentToken(),...(opts.headers||{})}}); }
+async function refreshBadge(){
+  try{ const r=await fetch(API_BASE+'/health',{cache:'no-store'}); const d=await r.json(); const n=+d.pending||0;
+    const set=(el,show)=>{ if(!el)return; el.textContent=n; el.hidden=!(show&&n>0); };
+    set(document.getElementById('parentBadge'),true); set(document.getElementById('pfQBadge'),true);
+  }catch(e){ /* offline — leave the last badge as-is */ }
+}
+function queueRow(it){
+  const declined=it.status==='declined';
+  const row=document.createElement('div'); row.className='qrow'+(declined?' declined':'');
+  const opts=['<option value="">Auto-file</option>'].concat(Object.keys(GROUPS).map(g=>`<option value="${g}"${it.food_group===g?' selected':''}>${GROUPS[g].label}</option>`)).join('');
+  row.innerHTML=`<img src="${thumbURL(it.yt_id)}" alt="" />
+    <div class="qmeta"><h4>${it.title||it.yt_id}</h4><p class="qch">${it.channel||''}${declined?' · declined':''}</p>
+      <div class="qacts">
+        <select class="qfg">${opts}</select>
+        <button class="qbtn ok">${declined?'Approve anyway':'Approve'}</button>
+        ${declined?'':'<button class="qbtn no">Decline</button>'}
+      </div></div>`;
+  const okBtn=row.querySelector('.qbtn.ok'), noBtn=row.querySelector('.qbtn.no'), sel=row.querySelector('.qfg');
+  okBtn.onclick=async()=>{ okBtn.disabled=true; okBtn.textContent='…';
+    try{ const body={yt_id:it.yt_id}; if(sel.value) body.food_group=sel.value;
+      const r=await admin('approve',{method:'POST',body:JSON.stringify(body)});
+      if(!r.ok) throw 0;
+    }catch(e){ okBtn.disabled=false; okBtn.textContent='Try again'; return; }
+    await syncLibrary(); refreshBadge(); renderQueue(); refreshAll();
+  };
+  if(noBtn) noBtn.onclick=async()=>{ noBtn.disabled=true;
+    try{ await admin('decline',{method:'POST',body:JSON.stringify({yt_id:it.yt_id})}); }catch(e){ noBtn.disabled=false; return; }
+    refreshBadge(); renderQueue();
+  };
+  return row;
+}
+async function renderQueue(){
+  const box=sheet.querySelector('#pfQueueList'); if(!box) return;
+  box.innerHTML='<p class="pf-note">Loading…</p>';
+  let items;
+  try{ const r=await admin('queue'); if(r.status===401){ clearParentToken(); box.innerHTML='<p class="pf-note">This device is no longer signed in — reopen the grown-up section to enter the token.</p>'; return; } items=await r.json(); }
+  catch(e){ box.innerHTML='<p class="pf-note">Couldn’t reach the library. Check the connection and try again.</p>'; return; }
+  if(!Array.isArray(items)){ box.innerHTML='<p class="pf-note">Nothing to show.</p>'; return; }
+  const pending=items.filter(i=>i.status==='pending'), declined=items.filter(i=>i.status==='declined');
+  box.innerHTML='';
+  if(!pending.length) box.insertAdjacentHTML('beforeend','<p class="pf-note">No requests waiting right now.</p>');
+  pending.forEach(it=>box.appendChild(queueRow(it)));
+  if(declined.length){ box.insertAdjacentHTML('beforeend','<div class="pf-subh">Declined</div>'); declined.forEach(it=>box.appendChild(queueRow(it))); }
+}
 
 /* ---- the maths gate ---- */
 const gate=document.createElement('div'); gate.className='pf-modal'; gate.id='pfGate';
@@ -1918,14 +1990,55 @@ function newSum(){gA=3+Math.floor(Math.random()*7); gB=4+Math.floor(Math.random(
   document.getElementById('pfAns').value=''; document.getElementById('pfGateErr').textContent=''; gTries=0;}
 function openGate(){newSum(); gate.classList.add('show'); setTimeout(()=>document.getElementById('pfAns').focus(),50);}
 function tryGate(){const v=parseInt(document.getElementById('pfAns').value,10);
-  if(v===gA*gB){gate.classList.remove('show'); sheet.classList.add('show'); refreshAll();}
+  if(v===gA*gB){gate.classList.remove('show'); enterBackOffice();}
   else{gTries++; document.getElementById('pfGateErr').textContent=gTries>=3?'Not quite — try a new sum.':'Not quite, try again.'; if(gTries>=3)newSum(); document.getElementById('pfAns').value='';}}
 document.getElementById('pfGateGo').onclick=tryGate;
 document.getElementById('pfAns').addEventListener('keydown',e=>{if(e.key==='Enter')tryGate();});
 document.getElementById('pfGateCancel').onclick=()=>gate.classList.remove('show');
 document.getElementById('parentBtn').onclick=openGate;
 
+/* ---- the real gate: the PARENT token ----
+   The sums above are a charming outer skin (she can do the sums). The actual gate
+   is the parent token, entered ONCE per parent device and stored locally on THAT
+   device only — never on hers. Her device simply never has the token, so the back
+   office is unreachable there. */
+const tgate=document.createElement('div'); tgate.className='pf-modal'; tgate.id='pfTokenGate';
+tgate.innerHTML=`<div class="pf-card"><h2>Sign in this device</h2>
+  <p>Enter the parent token once. It's stored on this device only — never on your child's.</p>
+  <input class="pf-in" id="pfTok" type="password" inputmode="text" autocomplete="off" placeholder="parent token" />
+  <div class="pf-err" id="pfTokErr"></div>
+  <div style="display:flex;gap:10px;margin-top:6px;"><button class="btn ghost" id="pfTokCancel" style="flex:1;">Cancel</button><button class="btn" id="pfTokGo" style="flex:1;">Unlock</button></div>
+</div>`;
+document.body.appendChild(tgate);
+function openSheet(){ sheet.classList.add('show');
+  sheet.querySelectorAll('.pf-tab').forEach(x=>x.classList.toggle('on',x.dataset.v==='requests'));  // land on Requests
+  sheet.querySelectorAll('.pf-view').forEach(v=>v.classList.toggle('on',v.id==='pfQueue'));
+  refreshAll(); renderQueue(); refreshBadge();
+}
+function enterBackOffice(){
+  if(parentToken()){ openSheet(); pingToken(); }        // trusted device: in now, validate in the background
+  else openTokenGate();
+}
+function openTokenGate(){ document.getElementById('pfTokErr').textContent=''; document.getElementById('pfTok').value='';
+  tgate.classList.add('show'); setTimeout(()=>document.getElementById('pfTok').focus(),50); }
+async function pingToken(){ try{ const r=await admin('ping'); if(r.status===401){ clearParentToken(); sheet.classList.remove('show'); alert('This device is no longer authorised — please enter the parent token again.'); } }catch(e){ /* offline: keep the cached session */ } }
+async function tryToken(){ const err=document.getElementById('pfTokErr'), go=document.getElementById('pfTokGo');
+  const t=(document.getElementById('pfTok').value||'').trim();
+  if(!t){ err.textContent='Enter the token.'; return; }
+  go.disabled=true; err.textContent='Checking…';
+  try{ const r=await fetch(API_BASE+'/admin/ping',{headers:{'Authorization':'Bearer '+t}});
+    if(r.ok){ setParentToken(t); tgate.classList.remove('show'); document.getElementById('pfTok').value=''; openSheet(); }
+    else { err.textContent='That token didn’t work.'; }
+  }catch(e){ err.textContent='Couldn’t reach the server — check the connection.'; }
+  go.disabled=false;
+}
+document.getElementById('pfTokGo').onclick=tryToken;
+document.getElementById('pfTok').addEventListener('keydown',e=>{if(e.key==='Enter')tryToken();});
+document.getElementById('pfTokCancel').onclick=()=>tgate.classList.remove('show');
+
 refreshAll();
+refreshBadge();  // show any waiting-request count on the lock without opening it
+setInterval(refreshBadge, 60000);
 syncLibrary();   // pull the approved library from the pixfix Worker (D1); re-renders on arrival
 </script>
 <script>
